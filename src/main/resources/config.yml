@@ -1,0 +1,153 @@
+# FAH Resource Donor Configuration
+# By Thijs226 - Donate unused server resources to Folding@home
+
+folding-at-home:
+  # Automatic Installation
+  # Set to false if you want to install FAH manually
+  auto-install: true
+  
+  # Port Configuration (IMPORTANT for hosted servers!)
+  # Most Minecraft hosts only provide ONE port
+  ports:
+    # Control port for FAH communication (0 = disabled/no control)
+    # Set to 0 for shared hosting (Apex, Shockbyte, etc.)
+    # Set to 36330 for VPS/dedicated servers
+    control-port: 0
+    
+    # Web interface port (0 = disabled)
+    # Set to 0 for shared hosting
+    # Set to 7396 for VPS/dedicated servers  
+    web-port: 0
+    
+    # Run mode when ports are disabled
+    # "file-based" = Restart FAH to change cores (works on all hosts)
+    no-port-mode: "file-based"
+  
+  # IMPORTANT: Your Folding@home Account Details
+  # You need EITHER username+team+passkey OR a token!
+  account:
+    # OPTION 1: Traditional Setup (Recommended)
+    # =========================================
+    # Your Folding@home username
+    # Register at: https://foldingathome.org/start-folding/
+    username: ""
+    
+    # Your team ID
+    # Find teams at: https://stats.foldingathome.org/teams
+    # Default: 0 (no team)
+    team-id: "0"
+    
+    # Your passkey for bonus points (32 characters)
+    # Get one at: https://apps.foldingathome.org/getpasskey
+    # Example: "1234567890abcdef1234567890abcdef"
+    passkey: ""
+    
+    # OPTION 2: Account Token (Alternative)
+    # ======================================
+    # Your account token to link this server to your F@H account
+    # Get from your F@H account dashboard when logged in
+    # This links the server as one of your machines
+    # Note: Anyone with this token can link machines to your account!
+    account-token: ""
+    
+    # Machine name (how this server appears in your account)
+    machine-name: "Minecraft-Server"
+    
+    # Use anonymous mode (hides username from stats)
+    anonymous: false
+  
+  # Research Cause Preference
+  cause-preference:
+    # Primary cause: ANY, ALZHEIMERS, CANCER, HUNTINGTONS, PARKINSONS, 
+    #                INFLUENZA, DIABETES, COVID-19, HIGH_PRIORITY
+    primary: "ANY"
+    
+    # Secondary cause (backup)
+    secondary: "HIGH_PRIORITY"
+    
+    # Allow any cause if preferred unavailable
+    allow-any-fallback: true
+    
+    # GPU folding preference (if available)
+    gpu-cause: "HIGH_PRIORITY"
+  
+  # Default account settings (used if above is blank)
+  # This is a fallback - PLEASE SET YOUR OWN ACCOUNT ABOVE!
+  default-account:
+    username: "Thijs226_MCServer_Guest"
+    team-id: "1067089"
+    
+  # Allow players to use their own accounts
+  allow-player-accounts: true
+  
+  # Democratic cause voting
+  democratic-cause:
+    enabled: true
+    vote-command: true
+    auto-switch: true
+    vote-period: 24  # hours
+  
+  # Web Control Interface
+  web-control:
+    enabled: true
+    allowed-ips:
+      - "127.0.0.1"
+      - "192.168.1.0/24"
+    password: ""
+
+server:
+  # Total CPU cores available
+  total-cores: 8
+  
+  # Cores to always reserve for Minecraft
+  reserved-cores: 1
+
+allocation:
+  # Mode: dynamic, tiered, percentage
+  mode: "dynamic"
+  
+  # Dynamic mode settings
+  dynamic:
+    cores-per-player: 0.5
+    min-cores-for-minecraft: 1
+    max-cores-for-fah: 7
+  
+  # Tiered mode settings  
+  tiered:
+    - players: 0
+      fah-cores: 7
+    - players: 1-3
+      fah-cores: 5
+    - players: 4-7
+      fah-cores: 3
+    - players: 8-12
+      fah-cores: 1
+    - players: 13+
+      fah-cores: 0
+
+monitoring:
+  # Check interval (seconds)
+  check-interval: 30
+  
+  # Grace period (seconds)
+  grace-period: 60
+  
+  # TPS monitoring
+  tps-monitoring: true
+  min-tps: 18.0
+  
+statistics:
+  # Track statistics
+  enabled: true
+  
+  # Show on join
+  show-on-join: true
+  
+  # Broadcast milestones
+  broadcast-milestones: true
+
+# Auto-update FAH client
+auto-update: true
+
+# Debug logging (shows FAH output)
+debug: false
