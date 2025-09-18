@@ -97,10 +97,44 @@ folding-at-home:
 
 server:
   # Total CPU cores available
+  # This will be automatically adjusted based on detected environment
   total-cores: 8
   
   # Cores to always reserve for Minecraft
   reserved-cores: 1
+  
+  # Environment Detection & Platform Support
+  environment:
+    # Auto-detect hosting environment (Pterodactyl, Docker, shared hosting, etc.)
+    # Set to false to disable auto-detection and use manual settings
+    auto-detect: true
+    
+    # Platform-specific overrides (only used if auto-detect is false)
+    platform: "auto"  # Options: auto, pterodactyl, docker, shared, vps
+    
+    # Safety features for restricted environments
+    strict-limits: true     # Enforce conservative limits in containerized/shared environments
+    respect-container-limits: true  # Honor Docker/container memory/CPU limits
+    
+    # Environment-specific settings
+    pterodactyl:
+      # Conservative settings for Pterodactyl Panel compatibility
+      max-cores-percentage: 50  # Use at most 50% of available cores
+      disable-web-interface: true
+      use-file-mode: true
+      
+    docker:
+      # Docker container settings
+      max-cores-percentage: 70  # Use at most 70% of available cores
+      respect-cgroup-limits: true
+      monitor-container-stats: true
+      
+    shared-hosting:
+      # Very conservative settings for shared hosting
+      max-cores: 1
+      max-memory-mb: 512
+      disable-ports: true
+      minimal-logging: true
 
 allocation:
   # Mode: dynamic, tiered, percentage

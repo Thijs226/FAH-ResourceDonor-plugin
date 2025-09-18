@@ -4,6 +4,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.Bukkit;
 import com.thijs226.fahdonor.commands.FAHCommands;
 import com.thijs226.fahdonor.voting.CauseVotingManager;
+import com.thijs226.fahdonor.environment.PlatformResourceManager;
 import java.io.File;
 import java.util.logging.Level;
 
@@ -14,6 +15,7 @@ public class FAHResourceDonor extends JavaPlugin {
     private ConfigManager configManager;
     private StatisticsManager statisticsManager;
     private CauseVotingManager votingManager;
+    private PlatformResourceManager platformManager;
     private String teamId = "";
     private String userName = "Thijs226_MCServer";
     
@@ -24,10 +26,17 @@ public class FAHResourceDonor extends JavaPlugin {
         // Load configuration
         saveDefaultConfig();
         configManager = new ConfigManager(this);
+        
+        // Initialize platform/environment detection and management
+        platformManager = new PlatformResourceManager(this);
+        
         teamId = getConfig().getString("folding-at-home.default-account.team-id", "");
         
         // Check for account configuration
         checkAccountConfiguration();
+        
+        // Log environment-specific recommendations
+        platformManager.logEnvironmentRecommendations();
         
         // Check and install FAH if needed
         boolean fahAvailable = true;
@@ -54,9 +63,9 @@ public class FAHResourceDonor extends JavaPlugin {
             }
         }
         
-        // Initialize managers
-        fahManager = new FAHClientManager(this);
-        playerMonitor = new PlayerMonitor(this, fahManager);
+        // Initialize managers with platform awareness
+        fahManager = new FAHClientManager(this, platformManager);
+        playerMonitor = new PlayerMonitor(this, fahManager, platformManager);
         statisticsManager = new StatisticsManager(this);
         votingManager = new CauseVotingManager(this);
         
@@ -68,6 +77,7 @@ public class FAHResourceDonor extends JavaPlugin {
         
         if (fahAvailable && isFAHInstalled()) {
             getLogger().info("FAH Resource Donor enabled! Contributing to medical research.");
+            getLogger().info("Environment: " + platformManager.getEnvironmentInfo().getType().getDisplayName());
         } else {
             getLogger().info("FAH Resource Donor enabled in LIMITED MODE - Install FAH to activate donations");
         }
@@ -154,5 +164,9 @@ public class FAHResourceDonor extends JavaPlugin {
     
     public CauseVotingManager getVotingManager() {
         return votingManager;
+    }
+    
+    public PlatformResourceManager getPlatformManager() {
+        return platformManager;
     }
 }

@@ -7,19 +7,26 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import com.thijs226.fahdonor.environment.PlatformResourceManager;
 import java.lang.reflect.Method;
 
 public class PlayerMonitor implements Listener {
     private final FAHResourceDonor plugin;
     private final FAHClientManager fahManager;
+    private final PlatformResourceManager platformManager;
     private int checkTaskId = -1;
     private int lastPlayerCount = 0;
     private long lastChange = 0;
     private Method tpsMethod = null;
     
     public PlayerMonitor(FAHResourceDonor plugin, FAHClientManager fahManager) {
+        this(plugin, fahManager, null);
+    }
+    
+    public PlayerMonitor(FAHResourceDonor plugin, FAHClientManager fahManager, PlatformResourceManager platformManager) {
         this.plugin = plugin;
         this.fahManager = fahManager;
+        this.platformManager = platformManager;
         Bukkit.getPluginManager().registerEvents(this, plugin);
         
         // Try to find TPS method (Paper/Spigot specific)

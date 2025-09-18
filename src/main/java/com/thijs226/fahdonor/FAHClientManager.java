@@ -7,7 +7,7 @@ import java.io.*;
 import java.net.Socket;
 import java.nio.file.*;
 import java.util.*;
-import java.util.concurrent.*;
+import com.thijs226.fahdonor.environment.PlatformResourceManager;
 
 public class FAHClientManager {
     private final FAHResourceDonor plugin;
@@ -21,6 +21,7 @@ public class FAHClientManager {
     private AccountInfo currentAccount;
     private CausePreference currentCause;
     private final Map<UUID, AccountInfo> playerAccounts = new HashMap<>();
+    private PlatformResourceManager platformManager;
 
     public enum FoldingCause {
         ANY("ANY", "0", "All diseases - highest priority work"),
@@ -115,7 +116,12 @@ public class FAHClientManager {
     }
 
     public FAHClientManager(FAHResourceDonor plugin) {
+        this(plugin, null);
+    }
+    
+    public FAHClientManager(FAHResourceDonor plugin, PlatformResourceManager platformManager) {
         this.plugin = plugin;
+        this.platformManager = platformManager;
         this.fahDirectory = new File(plugin.getDataFolder(), "folding-at-home");
         this.executor = Executors.newSingleThreadScheduledExecutor();
 
@@ -663,8 +669,13 @@ public class FAHClientManager {
     }
 
     // Helper used but not defined in original snippet: calculateInitialCores
-        private int calculateInitialCores(int playerCount) {
-    // Uses allocation logic: delegate to plugin settings (approximate)
+    private int calculateInitialCores(int playerCount) {
+        // Use platform manager if available, otherwise fall back to original logic
+        if (platformManager != null) {
+            return platformManager.calculateFAHCores(playerCount);
+        }
+        
+        // Fallback to original allocation logic
         int total = plugin.getConfig().getInt("server.total-cores", 8);
         int reserved = plugin.getConfig().getInt("server.reserved-cores", 1);
         double cpp = plugin.getConfig().getDouble("allocation.dynamic.cores-per-player", 0.5);
