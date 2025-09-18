@@ -9,7 +9,7 @@ website: https://github.com/Thijs226/FAH-ResourceDonor
 commands:
   fah:
     description: Manage Folding@home integration
-    usage: /fah <status|stats|account|cause|vote|diseases|pause|resume|cores|web|reload>
+    usage: /fah <status|stats|account|cause|vote|diseases|pause|resume|cores|web|reload|environment|limits|platform|optimize>
     aliases: [folding, fahdonor]
 
 permissions:
@@ -23,6 +23,7 @@ permissions:
       fahdonor.cores: true
       fahdonor.reload: true
       fahdonor.web: true
+      fahdonor.environment: true
       
   fahdonor.account:
     description: Manage F@H account settings
@@ -50,4 +51,8 @@ permissions:
     
   fahdonor.web:
     description: Access web interface info
+    default: op
+    
+  fahdonor.environment:
+    description: View environment and platform information
     default: op

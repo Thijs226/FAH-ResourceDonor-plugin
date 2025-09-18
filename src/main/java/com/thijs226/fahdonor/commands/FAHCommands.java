@@ -4,6 +4,8 @@ import com.thijs226.fahdonor.FAHResourceDonor;
 import com.thijs226.fahdonor.FAHClientManager;
 import com.thijs226.fahdonor.FAHClientManager.FoldingCause;
 import com.thijs226.fahdonor.display.ResearchInfoDisplay;
+import com.thijs226.fahdonor.environment.PlatformResourceManager;
+import com.thijs226.fahdonor.environment.ServerEnvironmentDetector.*;
 import org.bukkit.Bukkit;
 import org.bukkit.command.*;
 import org.bukkit.entity.Player;
@@ -60,6 +62,15 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
                 return handleWeb(sender);
             case "reload":
                 return handleReload(sender);
+            case "environment":
+            case "env":
+                return handleEnvironment(sender);
+            case "limits":
+                return handleLimits(sender);
+            case "platform":
+                return handlePlatform(sender);
+            case "optimize":
+                return handleOptimize(sender);
             default:
                 sendHelp(sender);
                 return true;
@@ -848,6 +859,12 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
             sender.sendMessage(ChatColor.YELLOW + "/fah cores <number>" + ChatColor.GRAY + " - Set core count");
             sender.sendMessage(ChatColor.YELLOW + "/fah web" + ChatColor.GRAY + " - Web interface info");
             sender.sendMessage(ChatColor.YELLOW + "/fah reload" + ChatColor.GRAY + " - Reload config");
+            sender.sendMessage("");
+            sender.sendMessage(ChatColor.AQUA + "Environment Commands:");
+            sender.sendMessage(ChatColor.YELLOW + "/fah environment" + ChatColor.GRAY + " - Show detected environment");
+            sender.sendMessage(ChatColor.YELLOW + "/fah limits" + ChatColor.GRAY + " - View resource limits");
+            sender.sendMessage(ChatColor.YELLOW + "/fah platform" + ChatColor.GRAY + " - Platform-specific info");
+            sender.sendMessage(ChatColor.YELLOW + "/fah optimize" + ChatColor.GRAY + " - Apply environment optimizations");
         }
         
         sender.sendMessage("");
@@ -867,7 +884,8 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
             }
             
             if (sender.hasPermission("fahdonor.admin")) {
-                commands.addAll(Arrays.asList("debug", "install", "pause", "resume", "cores", "web", "reload", "cause"));
+                commands.addAll(Arrays.asList("debug", "install", "pause", "resume", "cores", "web", "reload", "cause",
+                    "environment", "env", "limits", "platform", "optimize"));
             }
             
             return commands.stream()
@@ -905,5 +923,249 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
         }
         
         return null;
+    }
+    
+    /**
+     * Handle environment command - shows detected environment information
+     */
+    private boolean handleEnvironment(CommandSender sender) {
+        if (!sender.hasPermission("fahdonor.admin")) {
+            sender.sendMessage(ChatColor.RED + "You don't have permission to view environment information!");
+            return true;
+        }
+        
+        PlatformResourceManager platformManager = plugin.getPlatformManager();
+        if (platformManager == null) {
+            sender.sendMessage(ChatColor.RED + "Platform manager not initialized!");
+            return true;
+        }
+        
+        EnvironmentInfo envInfo = platformManager.getEnvironmentInfo();
+        ResourceLimits limits = platformManager.getResourceLimits();
+        
+        sender.sendMessage(ChatColor.GOLD + "========= Environment Information =========");
+        sender.sendMessage(ChatColor.YELLOW + "Detected Environment: " + ChatColor.WHITE + envInfo.getType().getDisplayName());
+        sender.sendMessage(ChatColor.YELLOW + "Containerized: " + ChatColor.WHITE + (envInfo.isContainerized() ? "Yes" : "No"));
+        sender.sendMessage(ChatColor.YELLOW + "Resource Restricted: " + ChatColor.WHITE + (envInfo.isResourceRestricted() ? "Yes" : "No"));
+        sender.sendMessage(ChatColor.YELLOW + "Strict Limits: " + ChatColor.WHITE + (platformManager.isStrictLimitsEnforced() ? "Enabled" : "Disabled"));
+        
+        sender.sendMessage(ChatColor.GOLD + "========= Resource Limits =========");
+        sender.sendMessage(ChatColor.YELLOW + "Max Cores: " + ChatColor.WHITE + limits.getMaxCores());
+        sender.sendMessage(ChatColor.YELLOW + "Recommended Cores: " + ChatColor.WHITE + limits.getRecommendedCores());
+        sender.sendMessage(ChatColor.YELLOW + "Max Memory: " + ChatColor.WHITE + limits.getMaxMemoryMB() + "MB");
+        
+        // Show environment-specific metadata
+        if (!envInfo.getMetadata().isEmpty()) {
+            sender.sendMessage(ChatColor.GOLD + "========= Environment Details =========");
+            for (Map.Entry<String, String> entry : envInfo.getMetadata().entrySet()) {
+                if (entry.getValue() != null) {
+                    sender.sendMessage(ChatColor.YELLOW + entry.getKey() + ": " + ChatColor.WHITE + entry.getValue());
+                }
+            }
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Handle limits command - shows current resource limits and allocation
+     */
+    private boolean handleLimits(CommandSender sender) {
+        if (!sender.hasPermission("fahdonor.admin")) {
+            sender.sendMessage(ChatColor.RED + "You don't have permission to view resource limits!");
+            return true;
+        }
+        
+        PlatformResourceManager platformManager = plugin.getPlatformManager();
+        if (platformManager == null) {
+            sender.sendMessage(ChatColor.RED + "Platform manager not initialized!");
+            return true;
+        }
+        
+        ResourceLimits limits = platformManager.getResourceLimits();
+        int playerCount = Bukkit.getOnlinePlayers().size();
+        int currentFAHCores = platformManager.calculateFAHCores(playerCount);
+        
+        sender.sendMessage(ChatColor.GOLD + "========= Current Resource Allocation =========");
+        sender.sendMessage(ChatColor.YELLOW + "Online Players: " + ChatColor.WHITE + playerCount);
+        sender.sendMessage(ChatColor.YELLOW + "Current FAH Cores: " + ChatColor.WHITE + currentFAHCores);
+        
+        sender.sendMessage(ChatColor.GOLD + "========= Environment Limits =========");
+        sender.sendMessage(ChatColor.YELLOW + "Max Allowed Cores: " + ChatColor.WHITE + limits.getMaxCores());
+        sender.sendMessage(ChatColor.YELLOW + "Recommended Cores: " + ChatColor.WHITE + limits.getRecommendedCores());
+        sender.sendMessage(ChatColor.YELLOW + "Max Memory: " + ChatColor.WHITE + limits.getMaxMemoryMB() + "MB");
+        
+        sender.sendMessage(ChatColor.GOLD + "========= Configuration =========");
+        sender.sendMessage(ChatColor.YELLOW + "Configured Total Cores: " + ChatColor.WHITE + 
+                          plugin.getConfig().getInt("server.total-cores", 8));
+        sender.sendMessage(ChatColor.YELLOW + "Reserved Cores: " + ChatColor.WHITE + 
+                          plugin.getConfig().getInt("server.reserved-cores", 1));
+        sender.sendMessage(ChatColor.YELLOW + "Allocation Mode: " + ChatColor.WHITE + 
+                          plugin.getConfig().getString("allocation.mode", "dynamic"));
+        
+        return true;
+    }
+    
+    /**
+     * Handle platform command - shows platform-specific settings and recommendations
+     */
+    private boolean handlePlatform(CommandSender sender) {
+        if (!sender.hasPermission("fahdonor.admin")) {
+            sender.sendMessage(ChatColor.RED + "You don't have permission to view platform information!");
+            return true;
+        }
+        
+        PlatformResourceManager platformManager = plugin.getPlatformManager();
+        if (platformManager == null) {
+            sender.sendMessage(ChatColor.RED + "Platform manager not initialized!");
+            return true;
+        }
+        
+        EnvironmentInfo envInfo = platformManager.getEnvironmentInfo();
+        
+        sender.sendMessage(ChatColor.GOLD + "========= Platform Information =========");
+        sender.sendMessage(ChatColor.YELLOW + "Platform: " + ChatColor.WHITE + envInfo.getType().getDisplayName());
+        
+        // Show platform-specific recommendations
+        switch (envInfo.getType()) {
+            case PTERODACTYL:
+                sender.sendMessage(ChatColor.GREEN + "Pterodactyl Panel Detected:");
+                sender.sendMessage(ChatColor.WHITE + "• File-based control mode enabled");
+                sender.sendMessage(ChatColor.WHITE + "• Web interface disabled for compatibility");
+                sender.sendMessage(ChatColor.WHITE + "• Conservative resource allocation active");
+                break;
+                
+            case DOCKER:
+                sender.sendMessage(ChatColor.GREEN + "Docker Container Detected:");
+                sender.sendMessage(ChatColor.WHITE + "• Container resource limits respected");
+                sender.sendMessage(ChatColor.WHITE + "• Consider mapping FAH ports for web access");
+                sender.sendMessage(ChatColor.WHITE + "• Mount /tmp as tmpfs for better performance");
+                break;
+                
+            case SHARED_HOSTING:
+                sender.sendMessage(ChatColor.YELLOW + "Shared Hosting Detected:");
+                sender.sendMessage(ChatColor.WHITE + "• Minimal resource allocation (1 core max)");
+                sender.sendMessage(ChatColor.WHITE + "• All ports disabled");
+                sender.sendMessage(ChatColor.GOLD + "• Consider upgrading to VPS for better performance");
+                break;
+                
+            case VPS_DEDICATED:
+                sender.sendMessage(ChatColor.GREEN + "VPS/Dedicated Server:");
+                sender.sendMessage(ChatColor.WHITE + "• Full FAH features available");
+                sender.sendMessage(ChatColor.WHITE + "• Web interface: http://yourserver:7396");
+                sender.sendMessage(ChatColor.WHITE + "• Optimal performance configuration active");
+                break;
+        }
+        
+        // Show current port configuration
+        sender.sendMessage(ChatColor.GOLD + "========= Port Configuration =========");
+        int controlPort = plugin.getConfig().getInt("folding-at-home.ports.control-port", 0);
+        int webPort = plugin.getConfig().getInt("folding-at-home.ports.web-port", 0);
+        
+        sender.sendMessage(ChatColor.YELLOW + "Control Port: " + ChatColor.WHITE + 
+                          (controlPort == 0 ? "Disabled" : String.valueOf(controlPort)));
+        sender.sendMessage(ChatColor.YELLOW + "Web Port: " + ChatColor.WHITE + 
+                          (webPort == 0 ? "Disabled" : String.valueOf(webPort)));
+        sender.sendMessage(ChatColor.YELLOW + "Mode: " + ChatColor.WHITE + 
+                          plugin.getConfig().getString("folding-at-home.ports.no-port-mode", "file-based"));
+        
+        return true;
+    }
+    
+    /**
+     * Handle optimize command - applies environment-specific optimizations
+     */
+    private boolean handleOptimize(CommandSender sender) {
+        if (!sender.hasPermission("fahdonor.admin")) {
+            sender.sendMessage(ChatColor.RED + "You don't have permission to optimize settings!");
+            return true;
+        }
+        
+        PlatformResourceManager platformManager = plugin.getPlatformManager();
+        if (platformManager == null) {
+            sender.sendMessage(ChatColor.RED + "Platform manager not initialized!");
+            return true;
+        }
+        
+        EnvironmentInfo envInfo = platformManager.getEnvironmentInfo();
+        
+        sender.sendMessage(ChatColor.YELLOW + "Applying optimizations for " + envInfo.getType().getDisplayName() + "...");
+        
+        // The optimization is already done during initialization
+        // This command mainly serves to re-trigger it and inform the user
+        boolean configChanged = applyEnvironmentOptimizations(envInfo);
+        
+        if (configChanged) {
+            plugin.saveConfig();
+            plugin.reloadConfig();
+            sender.sendMessage(ChatColor.GREEN + "Configuration optimized and saved!");
+            sender.sendMessage(ChatColor.YELLOW + "Restart the server to apply all changes.");
+        } else {
+            sender.sendMessage(ChatColor.GREEN + "Configuration is already optimized for your environment!");
+        }
+        
+        // Show what was optimized
+        sender.sendMessage(ChatColor.GOLD + "Environment-specific optimizations:");
+        switch (envInfo.getType()) {
+            case PTERODACTYL:
+                sender.sendMessage(ChatColor.WHITE + "• Disabled control and web ports");
+                sender.sendMessage(ChatColor.WHITE + "• Enabled file-based control mode");
+                sender.sendMessage(ChatColor.WHITE + "• Set conservative core allocation");
+                break;
+            case DOCKER:
+                sender.sendMessage(ChatColor.WHITE + "• Configured for container resource limits");
+                sender.sendMessage(ChatColor.WHITE + "• Enabled cgroup monitoring");
+                break;
+            case SHARED_HOSTING:
+                sender.sendMessage(ChatColor.WHITE + "• Limited to 1 core maximum");
+                sender.sendMessage(ChatColor.WHITE + "• Disabled all ports");
+                sender.sendMessage(ChatColor.WHITE + "• Minimal resource usage");
+                break;
+            case VPS_DEDICATED:
+                sender.sendMessage(ChatColor.WHITE + "• Enabled full feature set");
+                sender.sendMessage(ChatColor.WHITE + "• Optimized for maximum performance");
+                break;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Apply environment-specific optimizations to configuration
+     */
+    private boolean applyEnvironmentOptimizations(EnvironmentInfo envInfo) {
+        boolean changed = false;
+        
+        switch (envInfo.getType()) {
+            case PTERODACTYL:
+            case SHARED_HOSTING:
+                if (plugin.getConfig().getInt("folding-at-home.ports.control-port", 36330) != 0) {
+                    plugin.getConfig().set("folding-at-home.ports.control-port", 0);
+                    changed = true;
+                }
+                if (plugin.getConfig().getInt("folding-at-home.ports.web-port", 7396) != 0) {
+                    plugin.getConfig().set("folding-at-home.ports.web-port", 0);
+                    changed = true;
+                }
+                if (!plugin.getConfig().getString("folding-at-home.ports.no-port-mode", "").equals("file-based")) {
+                    plugin.getConfig().set("folding-at-home.ports.no-port-mode", "file-based");
+                    changed = true;
+                }
+                break;
+        }
+        
+        if (envInfo.getType() == EnvironmentType.SHARED_HOSTING) {
+            if (plugin.getConfig().getInt("server.total-cores", 8) > 2) {
+                plugin.getConfig().set("server.total-cores", 2);
+                changed = true;
+            }
+            if (plugin.getConfig().getInt("allocation.dynamic.max-cores-for-fah", 7) > 1) {
+                plugin.getConfig().set("allocation.dynamic.max-cores-for-fah", 1);
+                changed = true;
+            }
+        }
+        
+        return changed;
+    }
     }
 }
