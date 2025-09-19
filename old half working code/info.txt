@@ -1,1 +1,0 @@
-this is old half broken code the plugin jar everything worked but some feutures where missing  like voting and cofig options and the acount login did not work since it did not had a token setting only a passkey with the name token
