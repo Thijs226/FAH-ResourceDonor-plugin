@@ -40,6 +40,12 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
                 return handleAccount(sender, args);
             case "status":
                 return handleStatus(sender);
+            case "start":
+                return handleStart(sender);
+            case "stop":
+                return handleStop(sender);
+            case "info":
+                return handleInfo(sender);
             case "debug":
                 return handleDebug(sender, args);
             case "install":
@@ -838,6 +844,7 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
         
         sender.sendMessage(ChatColor.AQUA + "Basic Commands:");
         sender.sendMessage(ChatColor.YELLOW + "/fah status" + ChatColor.GRAY + " - Check current status");
+        sender.sendMessage(ChatColor.YELLOW + "/fah info" + ChatColor.GRAY + " - Detailed information");
         sender.sendMessage(ChatColor.YELLOW + "/fah stats" + ChatColor.GRAY + " - View contribution statistics");
         sender.sendMessage(ChatColor.YELLOW + "/fah diseases" + ChatColor.GRAY + " - List research causes");
         sender.sendMessage(ChatColor.YELLOW + "/fah vote <disease>" + ChatColor.GRAY + " - Vote for research focus");
@@ -853,6 +860,8 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
         if (sender.hasPermission("fahdonor.admin")) {
             sender.sendMessage("");
             sender.sendMessage(ChatColor.AQUA + "Admin Commands:");
+            sender.sendMessage(ChatColor.YELLOW + "/fah start" + ChatColor.GRAY + " - Start FAH client");
+            sender.sendMessage(ChatColor.YELLOW + "/fah stop" + ChatColor.GRAY + " - Stop FAH client");
             sender.sendMessage(ChatColor.YELLOW + "/fah install" + ChatColor.GRAY + " - Installation help");
             sender.sendMessage(ChatColor.YELLOW + "/fah pause" + ChatColor.GRAY + " - Pause folding");
             sender.sendMessage(ChatColor.YELLOW + "/fah resume" + ChatColor.GRAY + " - Resume folding");
@@ -876,7 +885,7 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
             List<String> commands = new ArrayList<>(Arrays.asList(
-                "setup", "token", "passkey", "status", "stats", "diseases", "vote"
+                "setup", "token", "passkey", "status", "info", "start", "stop", "stats", "diseases", "vote"
             ));
             
             if (sender.hasPermission("fahdonor.account")) {
@@ -1166,5 +1175,102 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
         }
         
         return changed;
+    }
+    
+    private boolean handleStart(CommandSender sender) {
+        if (!sender.hasPermission("fahdonor.admin")) {
+            sender.sendMessage(ChatColor.RED + "You don't have permission to control FAH!");
+            return true;
+        }
+        
+        if (plugin.isRunning()) {
+            sender.sendMessage(ChatColor.YELLOW + "FAH is already running!");
+            return true;
+        }
+        
+        sender.sendMessage(ChatColor.YELLOW + "Starting FAH client...");
+        
+        // Start the FAH client
+        if (plugin.getFAHClient() != null) {
+            plugin.getFAHClient().resume();
+            plugin.setRunning(true);
+            sender.sendMessage(ChatColor.GREEN + "FAH client started successfully!");
+        } else {
+            sender.sendMessage(ChatColor.RED + "FAH client not initialized. Try reloading the plugin.");
+        }
+        
+        return true;
+    }
+    
+    private boolean handleStop(CommandSender sender) {
+        if (!sender.hasPermission("fahdonor.admin")) {
+            sender.sendMessage(ChatColor.RED + "You don't have permission to control FAH!");
+            return true;
+        }
+        
+        if (!plugin.isRunning()) {
+            sender.sendMessage(ChatColor.YELLOW + "FAH is not currently running!");
+            return true;
+        }
+        
+        sender.sendMessage(ChatColor.YELLOW + "Stopping FAH client...");
+        
+        // Stop the FAH client
+        if (plugin.getFAHClient() != null) {
+            plugin.getFAHClient().pause();
+            plugin.setRunning(false);
+            sender.sendMessage(ChatColor.GREEN + "FAH client stopped successfully!");
+        } else {
+            sender.sendMessage(ChatColor.RED + "FAH client not available.");
+        }
+        
+        return true;
+    }
+    
+    private boolean handleInfo(CommandSender sender) {
+        if (!sender.hasPermission("fahdonor.stats")) {
+            sender.sendMessage(ChatColor.RED + "You don't have permission to view FAH info!");
+            return true;
+        }
+        
+        sender.sendMessage(ChatColor.GOLD + "=== FAH Resource Donor Info ===");
+        
+        // Basic status
+        if (plugin.getFAHClient() != null) {
+            boolean running = plugin.isRunning();
+            String status = plugin.getFAHClient().getWorkUnitStatus();
+            String progress = plugin.getFAHClient().getProgress();
+            long points = plugin.getFAHClient().getPointsEarned();
+            
+            sender.sendMessage(ChatColor.YELLOW + "Status: " + 
+                (running ? ChatColor.GREEN + "Running" : ChatColor.RED + "Stopped"));
+            sender.sendMessage(ChatColor.YELLOW + "Work Unit: " + ChatColor.WHITE + status);
+            sender.sendMessage(ChatColor.YELLOW + "Progress: " + ChatColor.WHITE + progress);
+            sender.sendMessage(ChatColor.YELLOW + "Points Earned: " + ChatColor.WHITE + points);
+            
+            // Connection test
+            boolean connected = plugin.getFAHClient().testConnection();
+            sender.sendMessage(ChatColor.YELLOW + "Connection: " + 
+                (connected ? ChatColor.GREEN + "Connected" : ChatColor.RED + "Offline"));
+        } else {
+            sender.sendMessage(ChatColor.RED + "FAH client not initialized");
+        }
+        
+        // Configuration info
+        String username = plugin.getConfig().getString("folding-at-home.account.username", "");
+        String teamId = plugin.getConfig().getString("folding-at-home.account.team-id", "");
+        
+        // Support legacy config
+        if (username.isEmpty()) {
+            username = plugin.getConfig().getString("fah.donor-name", "Not set");
+        }
+        if (teamId.isEmpty()) {
+            teamId = plugin.getConfig().getString("fah.team", "Not set");
+        }
+        
+        sender.sendMessage(ChatColor.YELLOW + "Donor: " + ChatColor.WHITE + username);
+        sender.sendMessage(ChatColor.YELLOW + "Team: " + ChatColor.WHITE + teamId);
+        
+        return true;
     }
 }

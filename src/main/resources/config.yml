@@ -1,6 +1,22 @@
 # FAH Resource Donor Configuration
 # By Thijs226 - Donate unused server resources to Folding@home
 
+# Legacy Configuration Support (for backward compatibility)
+# These settings are supported for users upgrading from older versions
+fah:
+  # Your Folding@home token/passkey (legacy format)
+  # Get your passkey at: https://apps.foldingathome.org/getpasskey
+  token: ""
+  
+  # Team ID (legacy format)
+  team: "1067089"
+  
+  # Donor name (legacy format)
+  donor-name: "Thijs226_MCServer"
+  
+  # Status check interval in seconds (legacy format)
+  check-interval: 300
+
 folding-at-home:
   # Automatic Installation
   # Set to false if you want to install FAH manually
@@ -183,5 +199,5 @@ statistics:
 # Auto-update FAH client
 auto-update: true
 
-# Debug logging (shows FAH output)
-debug: false
+# Debug logging (shows FAH output and detailed status)
+debug: true
