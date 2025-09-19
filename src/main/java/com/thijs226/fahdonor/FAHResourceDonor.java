@@ -162,30 +162,24 @@ public class FAHResourceDonor extends JavaPlugin {
     }
     
     private void startFAHService() {
-        // Get configuration for FAH client
-        String username = getConfig().getString("folding-at-home.account.username", "");
-        String passkey = getConfig().getString("folding-at-home.account.passkey", "");
-        String teamId = getConfig().getString("folding-at-home.account.team-id", "");
-        String accountToken = getConfig().getString("folding-at-home.account.account-token", "");
+        // Get configuration from FAHClientManager (which handles legacy config consolidation)
+        FAHClientManager.AccountInfo account = fahManager.getCurrentAccount();
         
-        // Support old config format for backward compatibility
-        String fahToken = getConfig().getString("fah.token", "");
-        String fahTeamId = getConfig().getString("fah.team", "");
-        String donorName = getConfig().getString("fah.donor-name", "");
+        String finalToken, finalTeamId, finalDonorName;
         
-        // Use new config format if available, fall back to old format
-        String finalToken = !passkey.isEmpty() ? passkey : fahToken;
-        String finalTeamId = !teamId.isEmpty() ? teamId : fahTeamId;
-        String finalDonorName = !username.isEmpty() ? username : 
-                               (!donorName.isEmpty() ? donorName : "Thijs226_MCServer");
-        
-        // Use account token if available (overrides passkey)
-        if (!accountToken.isEmpty()) {
-            finalToken = accountToken;
+        if (account.isUsingToken()) {
+            finalToken = account.accountToken;
+            finalTeamId = ""; // Team is handled by account token
+            finalDonorName = account.machineName;
             getLogger().info("Using account token for F@H authentication");
+        } else {
+            finalToken = account.passkey;
+            finalTeamId = account.teamId;
+            finalDonorName = account.username;
+            getLogger().info("Using traditional authentication: " + finalDonorName + " (Team: " + finalTeamId + ")");
         }
         
-        if (finalToken.isEmpty()) {
+        if (finalToken.isEmpty() && !account.isUsingToken()) {
             getLogger().warning("No FAH authentication configured! Please set either:");
             getLogger().warning("- folding-at-home.account.passkey (traditional)");
             getLogger().warning("- folding-at-home.account.account-token (new method)");
@@ -200,8 +194,13 @@ public class FAHResourceDonor extends JavaPlugin {
                 boolean success = fahClient.initialize(finalToken, finalTeamId, finalDonorName);
                 if (success) {
                     isRunning = true;
-                    getLogger().info("FAH client successfully initialized and started!");
-                    getLogger().info("Donor: " + finalDonorName + " (Team: " + finalTeamId + ")");
+                    if (account.isUsingToken()) {
+                        getLogger().info("FAH client successfully initialized with account token!");
+                        getLogger().info("Machine: " + finalDonorName + " (linked to your F@H account)");
+                    } else {
+                        getLogger().info("FAH client successfully initialized and started!");
+                        getLogger().info("Donor: " + finalDonorName + " (Team: " + finalTeamId + ")");
+                    }
                 } else {
                     getLogger().warning("Failed to initialize FAH client - check configuration");
                 }
@@ -294,6 +293,11 @@ public class FAHResourceDonor extends JavaPlugin {
     public void reloadConfiguration() {
         reloadConfig();
         configManager.reload();
+        
+        // Reload FAH manager configuration first
+        if (fahManager != null) {
+            fahManager.resetToDefaultAccount();
+        }
         
         if (fahClient != null) {
             // Restart FAH service with new configuration

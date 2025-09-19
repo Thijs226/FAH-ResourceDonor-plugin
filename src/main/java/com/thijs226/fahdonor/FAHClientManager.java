@@ -102,29 +102,50 @@ public class FAHClientManager {
         public String username;
         public String teamId;
         public String passkey;
+        public String accountToken;
+        public String machineName;
         public boolean anonymous;
 
         public AccountInfo(String username, String teamId, String passkey, boolean anonymous) {
+            this(username, teamId, passkey, "", "Minecraft-Server", anonymous);
+        }
+
+        public AccountInfo(String username, String teamId, String passkey, String accountToken, String machineName, boolean anonymous) {
             this.username = username;
             this.teamId = teamId;
             this.passkey = passkey;
+            this.accountToken = accountToken;
+            this.machineName = machineName;
             this.anonymous = anonymous;
         }
 
+        public boolean isUsingToken() {
+            return accountToken != null && !accountToken.isEmpty();
+        }
+
         public static AccountInfo fromConfig(ConfigurationSection config, ConfigurationSection defaultConfig) {
+            // Read all configuration values
             String username = config.getString("username", "");
             String teamId = config.getString("team-id", "");
             String passkey = config.getString("passkey", "");
+            String accountToken = config.getString("account-token", "");
+            String machineName = config.getString("machine-name", "Minecraft-Server");
             boolean anonymous = config.getBoolean("anonymous", false);
 
-            if (username == null || username.isEmpty()) {
-                username = defaultConfig.getString("username", "Thijs226_MCServer_Guest");
-            }
-            if (teamId == null || teamId.isEmpty()) {
-                teamId = defaultConfig.getString("team-id", "0");
+            // Configuration precedence: account-token > username+passkey+team > defaults
+            boolean usingToken = !accountToken.isEmpty();
+            
+            if (!usingToken) {
+                // Use defaults if traditional settings are empty
+                if (username == null || username.isEmpty()) {
+                    username = defaultConfig.getString("username", "Thijs226_MCServer_Guest");
+                }
+                if (teamId == null || teamId.isEmpty() || teamId.equals("0")) {
+                    teamId = defaultConfig.getString("team-id", "0");
+                }
             }
 
-            return new AccountInfo(username, teamId, passkey, anonymous);
+            return new AccountInfo(username, teamId, passkey, accountToken, machineName, anonymous);
         }
     }
 
@@ -149,9 +170,39 @@ public class FAHClientManager {
 
         currentAccount = AccountInfo.fromConfig(accountConfig, defaultConfig);
 
-        plugin.getLogger().info(() -> "Configured F@H Account: " +
-            (currentAccount.anonymous ? "Anonymous" : currentAccount.username) +
-            " (Team: " + currentAccount.teamId + ")");
+        // Handle legacy configuration support
+        String legacyToken = plugin.getConfig().getString("fah.token", "");
+        String legacyTeam = plugin.getConfig().getString("fah.team", "");
+        String legacyDonorName = plugin.getConfig().getString("fah.donor-name", "");
+
+        // If using account token, prefer new format, fall back to legacy
+        if (!currentAccount.isUsingToken() && !legacyToken.isEmpty()) {
+            currentAccount.accountToken = legacyToken;
+            currentAccount.passkey = legacyToken; // Legacy tokens were passkeys
+            plugin.getLogger().info("Using legacy fah.token configuration");
+        }
+
+        // If no team configured, try legacy
+        if ((currentAccount.teamId == null || currentAccount.teamId.equals("0")) && !legacyTeam.isEmpty()) {
+            currentAccount.teamId = legacyTeam;
+            plugin.getLogger().info("Using legacy fah.team configuration");
+        }
+
+        // If using default username, try legacy donor name
+        if ((currentAccount.username == null || currentAccount.username.equals("Thijs226_MCServer_Guest")) && !legacyDonorName.isEmpty()) {
+            currentAccount.username = legacyDonorName;
+            plugin.getLogger().info("Using legacy fah.donor-name configuration");
+        }
+
+        // Log final configuration
+        if (currentAccount.isUsingToken()) {
+            plugin.getLogger().info("Configured F@H Account: Token-based authentication");
+            plugin.getLogger().info("Machine name: " + currentAccount.machineName);
+        } else {
+            plugin.getLogger().info("Configured F@H Account: " +
+                (currentAccount.anonymous ? "Anonymous" : currentAccount.username) +
+                " (Team: " + currentAccount.teamId + ")");
+        }
     }
 
     private void loadCausePreference() {
@@ -288,28 +339,93 @@ public class FAHClientManager {
 
         int initialCores = calculateInitialCores(Bukkit.getOnlinePlayers().size());
 
-        String configXml = String.format(
-            "<config>\n" +
-            "  <user v='%s'/>\n" +
-            "  <team v='%s'/>\n" +
-            "  <passkey v='%s'/>\n" +
-            "  <slot id='0' type='CPU'>\n" +
-            "    <cpus v='%d'/>\n" +
-            "  </slot>\n" +
-            "  %s\n" +
-            "  %s\n" +
-            "</config>",
-            account.username,
-            account.teamId,
-            account.passkey,
-            initialCores,
-            controlConfig,
-            webConfig
-        );
+        String configXml;
+        
+        if (account.isUsingToken()) {
+            // Token-based configuration (links to existing account)
+            configXml = String.format(
+                "<config>\n" +
+                "  <!-- Account Token Configuration -->\n" +
+                "  <account-token v='%s'/>\n" +
+                "  <machine-name v='%s'/>\n" +
+                "  \n" +
+                "  <!-- Client Configuration -->\n" +
+                "  <power v='light'/>\n" +
+                "  <gpu v='false'/>\n" +
+                "  \n" +
+                "  <!-- Slot Configuration -->\n" +
+                "  <slot id='0' type='CPU'>\n" +
+                "    <cpus v='%d'/>\n" +
+                "  </slot>\n" +
+                "  \n" +
+                "  %s\n" +
+                "  %s\n" +
+                "  \n" +
+                "  <!-- Server Mode -->\n" +
+                "  <gui-enabled v='false'/>\n" +
+                "  \n" +
+                "  <!-- Logging -->\n" +
+                "  <log-level v='3'/>\n" +
+                "  <log-rotate v='true'/>\n" +
+                "  <log-rotate-max v='10'/>\n" +
+                "</config>",
+                account.accountToken,
+                account.machineName,
+                initialCores,
+                controlConfig,
+                webConfig
+            );
+        } else {
+            // Traditional username/passkey configuration
+            configXml = String.format(
+                "<config>\n" +
+                "  <!-- User Configuration -->\n" +
+                "  <user v='%s'/>\n" +
+                "  <team v='%s'/>\n" +
+                "  <passkey v='%s'/>\n" +
+                "  \n" +
+                "  <!-- Machine Name -->\n" +
+                "  <machine-name v='%s'/>\n" +
+                "  \n" +
+                "  <!-- Client Configuration -->\n" +
+                "  <power v='light'/>\n" +
+                "  <gpu v='false'/>\n" +
+                "  <fold-anon v='false'/>\n" +
+                "  \n" +
+                "  <!-- Slot Configuration -->\n" +
+                "  <slot id='0' type='CPU'>\n" +
+                "    <cpus v='%d'/>\n" +
+                "  </slot>\n" +
+                "  \n" +
+                "  %s\n" +
+                "  %s\n" +
+                "  \n" +
+                "  <!-- Server Mode -->\n" +
+                "  <gui-enabled v='false'/>\n" +
+                "  \n" +
+                "  <!-- Logging -->\n" +
+                "  <log-level v='3'/>\n" +
+                "  <log-rotate v='true'/>\n" +
+                "  <log-rotate-max v='10'/>\n" +
+                "</config>",
+                account.username,
+                account.teamId,
+                account.passkey,
+                account.machineName,
+                initialCores,
+                controlConfig,
+                webConfig
+            );
+        }
 
         File configFile = new File(fahDirectory, "config.xml");
         Files.write(configFile.toPath(), configXml.getBytes());
-        plugin.getLogger().info("Updated config.xml with control port only (web port disabled).");
+        
+        if (account.isUsingToken()) {
+            plugin.getLogger().info("Updated config.xml with account token authentication");
+        } else {
+            plugin.getLogger().info("Updated config.xml with traditional authentication (user: " + account.username + ")");
+        }
     }
 
     private void updateConfigXml(AccountInfo account, CausePreference cause) throws IOException {

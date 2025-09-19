@@ -241,22 +241,60 @@ public class FAHInstaller {
     }
     
     private void configureFAHClient() throws IOException {
-        // Get account details from config
-        String username = plugin.getConfig().getString("folding-at-home.account.username", "");
-        String teamId = plugin.getConfig().getString("folding-at-home.account.team-id", "0");
-        String passkey = plugin.getConfig().getString("folding-at-home.account.passkey", "");
-        String accountToken = plugin.getConfig().getString("folding-at-home.account.account-token", "");
-        String machineName = plugin.getConfig().getString("folding-at-home.account.machine-name", "Minecraft-Server");
+        configureFAHClient(null);
+    }
+    
+    public void configureFAHClient(FAHClientManager.AccountInfo accountInfo) throws IOException {
+        // Get account details - use provided info or read from config
+        String username, teamId, passkey, accountToken, machineName;
+        boolean usingToken;
         
-        // Check if using token-based authentication
-        boolean usingToken = !accountToken.isEmpty();
-        
-        // Use defaults if not configured
-        if (!usingToken && username.isEmpty()) {
-            username = plugin.getConfig().getString("folding-at-home.default-account.username", "Thijs226_MCServer_Guest");
-        }
-        if (!usingToken && (teamId.isEmpty() || teamId.equals("0"))) {
-            teamId = plugin.getConfig().getString("folding-at-home.default-account.team-id", "0");
+        if (accountInfo != null) {
+            // Use provided account info (preferred - ensures consistency)
+            username = accountInfo.username;
+            teamId = accountInfo.teamId;
+            passkey = accountInfo.passkey;
+            accountToken = accountInfo.accountToken;
+            machineName = accountInfo.machineName;
+            usingToken = accountInfo.isUsingToken();
+        } else {
+            // Fallback: read directly from config (for backward compatibility)
+            username = plugin.getConfig().getString("folding-at-home.account.username", "");
+            teamId = plugin.getConfig().getString("folding-at-home.account.team-id", "0");
+            passkey = plugin.getConfig().getString("folding-at-home.account.passkey", "");
+            accountToken = plugin.getConfig().getString("folding-at-home.account.account-token", "");
+            machineName = plugin.getConfig().getString("folding-at-home.account.machine-name", "Minecraft-Server");
+            
+            // Check if using token-based authentication
+            usingToken = !accountToken.isEmpty();
+            
+            // Handle legacy config support
+            if (!usingToken) {
+                String legacyToken = plugin.getConfig().getString("fah.token", "");
+                String legacyTeam = plugin.getConfig().getString("fah.team", "");
+                String legacyDonorName = plugin.getConfig().getString("fah.donor-name", "");
+                
+                if (!legacyToken.isEmpty()) {
+                    passkey = legacyToken;
+                    plugin.getLogger().info("Using legacy fah.token as passkey");
+                }
+                if (!legacyTeam.isEmpty() && (teamId.isEmpty() || teamId.equals("0"))) {
+                    teamId = legacyTeam;
+                    plugin.getLogger().info("Using legacy fah.team");
+                }
+                if (!legacyDonorName.isEmpty() && username.isEmpty()) {
+                    username = legacyDonorName;
+                    plugin.getLogger().info("Using legacy fah.donor-name");
+                }
+            }
+            
+            // Use defaults if not configured
+            if (!usingToken && username.isEmpty()) {
+                username = plugin.getConfig().getString("folding-at-home.default-account.username", "Thijs226_MCServer_Guest");
+            }
+            if (!usingToken && (teamId.isEmpty() || teamId.equals("0"))) {
+                teamId = plugin.getConfig().getString("folding-at-home.default-account.team-id", "0");
+            }
         }
         
         if (usingToken) {
