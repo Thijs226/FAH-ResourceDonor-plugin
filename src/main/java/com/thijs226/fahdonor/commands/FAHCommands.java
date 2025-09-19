@@ -828,8 +828,9 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
             return true;
         }
         
-        plugin.reloadConfig();
-        sender.sendMessage(ChatColor.GREEN + "Configuration reloaded!");
+        sender.sendMessage(ChatColor.YELLOW + "Reloading FAH configuration...");
+        plugin.reloadConfiguration();
+        sender.sendMessage(ChatColor.GREEN + "Configuration reloaded successfully!");
         return true;
     }
     

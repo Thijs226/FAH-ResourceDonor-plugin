@@ -614,7 +614,17 @@ public class FAHClientManager {
         if (controlPort <= 0) {
             throw new IOException("Invalid control port: " + controlPort);
         }
-        plugin.getLogger().info("Connecting to control port: " + controlPort);
-        // ...implementation for connecting to control port...
+        
+        try {
+            plugin.getLogger().info("Connecting to FAH control interface on port: " + controlPort);
+            controlSocket = new Socket("localhost", controlPort);
+            controlWriter = new PrintWriter(controlSocket.getOutputStream(), true);
+            controlReader = new BufferedReader(new InputStreamReader(controlSocket.getInputStream()));
+            
+            plugin.getLogger().info("Successfully connected to FAH control interface");
+        } catch (IOException e) {
+            plugin.getLogger().warning("Failed to connect to FAH control interface: " + e.getMessage());
+            throw e;
+        }
     }
 }
