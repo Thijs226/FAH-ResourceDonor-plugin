@@ -197,8 +197,6 @@ public class FAHClient {
             // Try alternative assignment method
             return requestWorkUnitAlternative();
         }
-        
-        return false;
     }
     
     private boolean requestWorkUnitAlternative() {
