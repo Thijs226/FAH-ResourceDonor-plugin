@@ -3,21 +3,29 @@
 # This plugin donates your Minecraft server's idle resources to Folding@Home
 # to help with medical research like cancer, Alzheimer's, and other diseases.
 #
-# 🚨 IMPORTANT: You MUST configure your token for this to work!
+# 🚨 IMPORTANT: You MUST configure your passkey for this to work!
 #    Get one from: https://apps.foldingathome.org/getpasskey
 
 # Folding@Home Configuration
 fah:
-  # Your Folding@Home passkey/token (REQUIRED)
+  # Your Folding@Home passkey (REQUIRED)
   # Get one from: https://apps.foldingathome.org/getpasskey
   # This identifies your contributions and earns you points
   # Example: "a1b2c3d4e5f6789012345678901234ab"
+  passkey: ""
+  
+  # Your Folding@Home token (optional, for advanced features)
+  # Different from passkey - used for API access
   token: ""
   
-  # Team ID to join (optional, default: 0 for no team)
+  # Team ID to join (optional, will use fallback team if not set)
   # Find teams at: https://stats.foldingathome.org/teams
   # Popular teams: 223518 (LinusTechTips), 52737 (Reddit), 1 (Folding@Home)
-  team: "0"
+  team: ""
+  
+  # Fallback team (used when team is not specified)
+  # Default is 1067089
+  fallback-team: "1067089"
   
   # Your donor name (will appear in FAH statistics)
   # This should be unique to identify your contributions

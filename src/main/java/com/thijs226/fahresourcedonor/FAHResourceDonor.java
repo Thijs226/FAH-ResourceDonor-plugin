@@ -18,8 +18,10 @@ public class FAHResourceDonor extends JavaPlugin {
     
     private FAHClient fahClient;
     private boolean isRunning = false;
+    private String fahPasskey;
     private String fahToken;
     private String fahTeamId;
+    private String fahFallbackTeam;
     private String donorName;
     private int checkInterval;
     private boolean debugMode;
@@ -66,44 +68,53 @@ public class FAHResourceDonor extends JavaPlugin {
     private void loadConfiguration() {
         FileConfiguration config = getConfig();
         
+        fahPasskey = config.getString("fah.passkey", "");
         fahToken = config.getString("fah.token", "");
-        fahTeamId = config.getString("fah.team", "0");
+        fahTeamId = config.getString("fah.team", "");
+        fahFallbackTeam = config.getString("fah.fallback-team", "1067089");
         donorName = config.getString("fah.donor-name", "MinecraftServer");
         checkInterval = config.getInt("fah.check-interval", 300); // 5 minutes default
         debugMode = config.getBoolean("debug", false);
         
-        if (fahToken.isEmpty()) {
-            getLogger().warning("FAH token is not configured! Please set 'fah.token' in config.yml");
-            getLogger().warning("Get your token from: https://apps.foldingathome.org/getpasskey");
-            getLogger().warning("Without a token, your contributions will NOT be credited to your account!");
+        // Use fallback team if no team is specified
+        if (fahTeamId.isEmpty()) {
+            fahTeamId = fahFallbackTeam;
+        }
+        
+        if (fahPasskey.isEmpty()) {
+            getLogger().warning("FAH passkey is not configured! Please set 'fah.passkey' in config.yml");
+            getLogger().warning("Get your passkey from: https://apps.foldingathome.org/getpasskey");
+            getLogger().warning("Without a passkey, your contributions will NOT be credited to your account!");
         } else {
-            // Validate token format
-            if (fahToken.length() < 32) {
-                getLogger().warning("FAH token appears to be too short - make sure you copied the full passkey");
+            // Validate passkey format
+            if (fahPasskey.length() < 32) {
+                getLogger().warning("FAH passkey appears to be too short - make sure you copied the full passkey");
             }
-            if (!fahToken.matches("^[a-fA-F0-9]+$")) {
-                getLogger().warning("FAH token contains invalid characters - should only contain letters and numbers");
+            if (!fahPasskey.matches("^[a-fA-F0-9]+$")) {
+                getLogger().warning("FAH passkey contains invalid characters - should only contain letters and numbers");
             }
         }
         
         if (debugMode) {
             getLogger().info("Configuration loaded:");
+            getLogger().info("  Passkey: " + (fahPasskey.isEmpty() ? "NOT SET" : "***configured***"));
             getLogger().info("  Token: " + (fahToken.isEmpty() ? "NOT SET" : "***configured***"));
-            getLogger().info("  Team: " + fahTeamId);
+            getLogger().info("  Team: " + fahTeamId + (fahTeamId.equals(fahFallbackTeam) ? " (fallback)" : ""));
+            getLogger().info("  Fallback Team: " + fahFallbackTeam);
             getLogger().info("  Donor Name: " + donorName);
             getLogger().info("  Check Interval: " + checkInterval + " seconds");
         }
     }
     
     private void startFAHService() {
-        if (fahToken.isEmpty()) {
-            getLogger().severe("Cannot start FAH service: No token configured!");
+        if (fahPasskey.isEmpty()) {
+            getLogger().severe("Cannot start FAH service: No passkey configured!");
             return;
         }
         
         CompletableFuture.runAsync(() -> {
             try {
-                boolean success = fahClient.initialize(fahToken, fahTeamId, donorName);
+                boolean success = fahClient.initialize(fahPasskey, fahTeamId, donorName);
                 if (success) {
                     isRunning = true;
                     getLogger().info("FAH client successfully initialized and started!");
@@ -242,9 +253,34 @@ public class FAHResourceDonor extends JavaPlugin {
         loadConfiguration();
         
         if (fahClient != null) {
-            fahClient.updateConfiguration(fahToken, fahTeamId, donorName);
+            fahClient.updateConfiguration(fahPasskey, fahTeamId, donorName);
         }
         
         getLogger().info("Configuration reloaded!");
+    }
+    
+    // Getter methods for access by other classes
+    public String getFahPasskey() {
+        return fahPasskey;
+    }
+    
+    public String getFahToken() {
+        return fahToken;
+    }
+    
+    public String getFahTeamId() {
+        return fahTeamId;
+    }
+    
+    public String getFahFallbackTeam() {
+        return fahFallbackTeam;
+    }
+    
+    public String getDonorName() {
+        return donorName;
+    }
+    
+    public boolean isDebugMode() {
+        return debugMode;
     }
 }
