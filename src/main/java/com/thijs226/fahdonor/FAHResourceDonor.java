@@ -104,8 +104,13 @@ public class FAHResourceDonor extends JavaPlugin {
         String teamId = getConfig().getString("folding-at-home.account.team-id", "");
         String accountToken = getConfig().getString("folding-at-home.account.account-token", "");
         
-        boolean hasToken = !accountToken.isEmpty();
-        boolean hasUsername = !username.isEmpty();
+        // Check legacy config as fallback
+        String legacyToken = getConfig().getString("fah.token", "");
+        String legacyTeam = getConfig().getString("fah.team", "");
+        String legacyDonorName = getConfig().getString("fah.donor-name", "");
+        
+        boolean hasToken = !accountToken.isEmpty() || !legacyToken.isEmpty();
+        boolean hasUsername = !username.isEmpty() || !legacyDonorName.isEmpty();
         
         if (!hasToken && !hasUsername) {
             getLogger().warning("========================================");
@@ -121,12 +126,21 @@ public class FAHResourceDonor extends JavaPlugin {
             getLogger().warning("Get started at: https://foldingathome.org/start-folding/");
             getLogger().warning("========================================");
         } else if (hasToken) {
-            String machineName = getConfig().getString("folding-at-home.account.machine-name", "Minecraft-Server");
-            getLogger().info("F@H configured with account token");
-            getLogger().info("Machine name: " + machineName);
-            getLogger().info("This server is linked to your F@H account");
+            if (!accountToken.isEmpty()) {
+                String machineName = getConfig().getString("folding-at-home.account.machine-name", "Minecraft-Server");
+                getLogger().info("F@H configured with account token");
+                getLogger().info("Machine name: " + machineName);
+                getLogger().info("This server is linked to your F@H account");
+            } else {
+                getLogger().info("F@H configured with legacy token/passkey");
+                getLogger().info("Donor: " + (!legacyDonorName.isEmpty() ? legacyDonorName : "Thijs226_MCServer") + 
+                               " (Team: " + (!legacyTeam.isEmpty() ? legacyTeam : "0") + ")");
+            }
         } else if (hasUsername) {
-            if (passkey.isEmpty()) {
+            String finalUsername = !username.isEmpty() ? username : legacyDonorName;
+            String finalTeamId = !teamId.isEmpty() ? teamId : legacyTeam;
+            
+            if (passkey.isEmpty() && legacyToken.isEmpty()) {
                 getLogger().warning("========================================");
                 getLogger().warning("NO PASSKEY CONFIGURED!");
                 getLogger().warning("You're missing out on bonus points!");
@@ -136,7 +150,7 @@ public class FAHResourceDonor extends JavaPlugin {
                 getLogger().warning("Then use: /fah passkey <your-passkey>");
                 getLogger().warning("========================================");
             } else {
-                getLogger().info("F@H Account: " + username + " (Team: " + teamId + ") [Passkey: Set]");
+                getLogger().info("F@H Account: " + finalUsername + " (Team: " + finalTeamId + ") [Passkey: Set]");
             }
         }
     }

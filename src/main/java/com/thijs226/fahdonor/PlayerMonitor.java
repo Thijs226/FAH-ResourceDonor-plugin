@@ -61,17 +61,16 @@ public class PlayerMonitor implements Listener {
         
         // Check if player is admin and account isn't configured
         if (event.getPlayer().hasPermission("fahdonor.admin")) {
-            String username = plugin.getConfig().getString("folding-at-home.account.username", "");
-            String passkey = plugin.getConfig().getString("folding-at-home.account.passkey", "");
+            FAHClientManager.AccountInfo account = manager.getCurrentAccount();
             
-            if (username.isEmpty()) {
+            if (!account.isUsingToken() && (account.username == null || account.username.isEmpty() || account.username.equals("Thijs226_MCServer_Guest"))) {
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     event.getPlayer().sendMessage(ChatColor.GOLD + "[FAH] " + ChatColor.YELLOW + 
                         "Folding@home account not configured! Use: /fah setup");
                     event.getPlayer().sendMessage(ChatColor.GRAY + 
                         "Your server's contributions aren't being tracked!");
                 }, 60L); // 3 seconds after join
-            } else if (passkey.isEmpty()) {
+            } else if (!account.isUsingToken() && (account.passkey == null || account.passkey.isEmpty())) {
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     event.getPlayer().sendMessage(ChatColor.GOLD + "[FAH] " + ChatColor.YELLOW + 
                         "No passkey configured! Use: /fah passkey <token>");
