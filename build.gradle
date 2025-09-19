@@ -14,18 +14,22 @@ java {
 
 repositories {
     mavenCentral()
+    // Use PaperMC repository as backup for Bukkit API
     maven {
-        name = 'spigotmc-repo'
-        url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/'
+        name = 'papermc-repo'
+        url = 'https://repo.papermc.io/repository/maven-public/'
     }
-    maven { 
-        name = 'sonatype'
-        url = 'https://oss.sonatype.org/content/repositories/snapshots' 
+    // Fallback to local Bukkit API
+    flatDir {
+        dirs 'libs'
     }
 }
 
 dependencies {
-    compileOnly 'org.spigotmc:spigot-api:1.21-R0.1-SNAPSHOT'
+    // Try PaperMC first, fallback to basic Bukkit API
+    compileOnly('io.papermc.paper:paper-api:1.21-R0.1-SNAPSHOT') {
+        because 'Primary Bukkit API dependency'
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {
