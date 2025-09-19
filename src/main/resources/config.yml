@@ -1,0 +1,38 @@
+# FAH ResourceDonor Plugin Configuration
+# 
+# This plugin donates your Minecraft server's idle resources to Folding@Home
+# to help with medical research like cancer, Alzheimer's, and other diseases.
+
+# Folding@Home Configuration
+fah:
+  # Your Folding@Home passkey/token (REQUIRED)
+  # Get one from: https://apps.foldingathome.org/getpasskey
+  # This identifies your contributions and earns you points
+  token: ""
+  
+  # Team ID to join (optional, default: 0 for no team)
+  # Find teams at: https://stats.foldingathome.org/teams
+  team: "0"
+  
+  # Your donor name (will appear in FAH statistics)
+  # This should be unique to identify your contributions
+  donor-name: "MinecraftServer"
+  
+  # How often to check FAH status (in seconds)
+  # Default: 300 (5 minutes)
+  check-interval: 300
+
+# Debug mode - enables detailed logging
+# Set to true when troubleshooting issues
+debug: false
+
+# Resource limits (planned for future versions)
+resource-limits:
+  # Maximum CPU usage percentage (0-100)
+  max-cpu: 50
+  
+  # Maximum memory usage in MB
+  max-memory: 512
+  
+  # Only fold when server TPS is above this threshold
+  min-tps: 18.0
