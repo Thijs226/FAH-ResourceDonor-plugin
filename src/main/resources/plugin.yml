@@ -1,0 +1,21 @@
+name: FAHResourceDonor
+version: ${version}
+main: com.thijs226.fahresourcedonor.FAHResourceDonor
+api-version: 1.21
+author: Thijs226
+description: A Minecraft plugin for donating computing resources to Folding@Home
+website: https://github.com/Thijs226/FAH-ResourceDonor-plugin
+
+commands:
+  fahdonor:
+    description: Main command for FAH Resource Donor
+    usage: /<command> [reload|status|info]
+    permission: fahdonor.use
+
+permissions:
+  fahdonor.use:
+    description: Allows use of basic FAH donor commands
+    default: op
+  fahdonor.admin:
+    description: Allows administrative control of FAH donor
+    default: op

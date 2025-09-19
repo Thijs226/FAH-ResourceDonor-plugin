@@ -1,0 +1,18 @@
+# FAH Resource Donor Plugin Configuration
+
+# Folding@Home configuration
+fah:
+  # Your Folding@Home token (keep this secure!)
+  token: ""
+  # Team ID to join (0 = no team)
+  team-id: "0"
+
+# Donor configuration
+donor:
+  # Display name for the donor
+  name: "Anonymous"
+
+# Debug configuration
+debug:
+  # Enable debug logging
+  enabled: false
