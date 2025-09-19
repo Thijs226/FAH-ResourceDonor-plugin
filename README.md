@@ -6,16 +6,18 @@ A Minecraft plugin that donates your server's idle resources to [Folding@Home](h
 
 If your plugin says it's running but you don't see contributions in your FAH account, follow these steps:
 
-### 1. Check Token Configuration
+### 1. Check Passkey Configuration
 ```yaml
 # In config.yml
 fah:
-  token: "YOUR_PASSKEY_HERE"  # Must not be empty!
-  team: "0"
+  passkey: "YOUR_PASSKEY_HERE"  # Must not be empty!
+  token: ""                     # Optional, for advanced features
+  team: ""                      # Leave empty to use fallback team
+  fallback-team: "1067089"      # Used when team is not specified
   donor-name: "MinecraftServer"
 ```
 
-**Get your token/passkey:** https://apps.foldingathome.org/getpasskey
+**Get your passkey:** https://apps.foldingathome.org/getpasskey
 
 ### 2. Enable Debug Mode
 ```yaml
@@ -32,7 +34,7 @@ Use `/fah status` to see if work units are being processed.
 
 ### 5. Common Issues and Fixes
 
-#### Issue: "Token not configured"
+#### Issue: "Passkey not configured"
 **Fix:** Add your passkey to config.yml and run `/fah reload`
 
 #### Issue: "Connection failed" 
@@ -43,7 +45,7 @@ Use `/fah status` to see if work units are being processed.
 
 #### Issue: "Stats not appearing in FAH account"
 **Fix:** 
-- Verify your token is correct
+- Verify your passkey is correct
 - Make sure your donor name is unique
 - Check https://stats.foldingathome.org/donor/YourDonorName
 
@@ -52,7 +54,7 @@ Use `/fah status` to see if work units are being processed.
 1. Download the plugin JAR file
 2. Place it in your server's `plugins/` folder
 3. Start your server
-4. Edit `plugins/FAHResourceDonor/config.yml` with your FAH token
+4. Edit `plugins/FAHResourceDonor/config.yml` with your FAH passkey
 5. Run `/fah reload` or restart the server
 
 ## Commands
@@ -70,10 +72,16 @@ Use `/fah status` to see if work units are being processed.
 ```yaml
 fah:
   # Your Folding@Home passkey (REQUIRED)
+  passkey: ""
+  
+  # Your Folding@Home token (optional, for advanced features)
   token: ""
   
-  # Team ID (optional, 0 = no team)
-  team: "0"
+  # Team ID (optional, leave empty to use fallback team)
+  team: ""
+  
+  # Fallback team (used when team is not specified)
+  fallback-team: "1067089"
   
   # Your donor name (appears in FAH stats)
   donor-name: "MinecraftServer"

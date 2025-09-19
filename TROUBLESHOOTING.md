@@ -4,15 +4,15 @@
 
 This is the most common issue. Here's how to fix it:
 
-### Step 1: Check Your Token
-Your Folding@Home token (passkey) is crucial for crediting your work.
+### Step 1: Check Your Passkey
+Your Folding@Home passkey is crucial for crediting your work.
 
-1. **Get a token:** Visit https://apps.foldingathome.org/getpasskey
+1. **Get a passkey:** Visit https://apps.foldingathome.org/getpasskey
 2. **Copy the ENTIRE passkey** (32+ characters, letters and numbers only)
 3. **Add to config.yml:**
    ```yaml
    fah:
-     token: "YOUR_FULL_PASSKEY_HERE"
+     passkey: "YOUR_FULL_PASSKEY_HERE"
    ```
 4. **Reload:** `/fah reload` or restart server
 
@@ -58,7 +58,7 @@ This will test:
 
 #### Issue: "Work not appearing in FAH account"
 **Solutions:**
-- Verify your token is correct
+- Verify your passkey is correct
 - Make sure donor name is unique
 - Check https://stats.foldingathome.org/donor/YourDonorName
 - It can take 30+ minutes for stats to update
@@ -144,7 +144,7 @@ A: Try adding "_MC" or numbers to make it unique.
 
 1. **Enable debug mode** and check console logs
 2. **Run `/fah diagnose`** to identify problems
-3. **Verify your token** works on the FAH website
+3. **Verify your passkey** works on the FAH website
 4. **Check firewall settings** for outbound connections
 5. **Try a different donor name** if yours conflicts
 
@@ -155,4 +155,4 @@ Include this information when asking for help:
 - Server software (Spigot/Paper) and version
 - Output of `/fah diagnose`
 - Console logs with debug enabled
-- Your configuration (without the token)
+- Your configuration (without the passkey)
