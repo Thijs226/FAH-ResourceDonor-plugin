@@ -50,6 +50,11 @@ public class FAHCommand implements CommandExecutor {
             case "stats":
                 handleStats(sender);
                 break;
+            case "diagnose":
+            case "diagnostic":
+            case "check":
+                handleDiagnose(sender);
+                break;
             default:
                 sendHelpMessage(sender);
                 break;
@@ -67,6 +72,7 @@ public class FAHCommand implements CommandExecutor {
         sender.sendMessage(ChatColor.YELLOW + "/fah info" + ChatColor.WHITE + " - Show configuration info");
         sender.sendMessage(ChatColor.YELLOW + "/fah debug [on|off]" + ChatColor.WHITE + " - Toggle debug mode");
         sender.sendMessage(ChatColor.YELLOW + "/fah stats" + ChatColor.WHITE + " - Show folding statistics");
+        sender.sendMessage(ChatColor.YELLOW + "/fah diagnose" + ChatColor.WHITE + " - Run diagnostic tests");
     }
     
     private void handleStatus(CommandSender sender) {
@@ -236,5 +242,68 @@ public class FAHCommand implements CommandExecutor {
         } else {
             sender.sendMessage(ChatColor.RED + "FAH client not initialized");
         }
+    }
+    
+    private void handleDiagnose(CommandSender sender) {
+        sender.sendMessage(ChatColor.YELLOW + "Running FAH diagnostics...");
+        
+        FAHDiagnostics diagnostics = new FAHDiagnostics(plugin);
+        
+        diagnostics.runDiagnostics(plugin.getFahToken(), plugin.getFahTeamId(), plugin.getDonorName())
+            .thenAccept(result -> {
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    sender.sendMessage(ChatColor.GOLD + "=== FAH Diagnostic Results ===");
+                    
+                    // Token validation
+                    sender.sendMessage(ChatColor.GREEN + "Token Valid: " + 
+                        (result.tokenValid ? ChatColor.GREEN + "✓ YES" : ChatColor.RED + "✗ NO"));
+                    
+                    // Internet connectivity
+                    sender.sendMessage(ChatColor.GREEN + "Internet Connection: " + 
+                        (result.internetConnected ? ChatColor.GREEN + "✓ YES" : ChatColor.RED + "✗ NO"));
+                    
+                    // FAH servers
+                    sender.sendMessage(ChatColor.GREEN + "FAH Servers Reachable: " + 
+                        (result.fahServersReachable ? ChatColor.GREEN + "✓ YES" : ChatColor.RED + "✗ NO"));
+                    
+                    // Donor name
+                    sender.sendMessage(ChatColor.GREEN + "Donor Name Available: " + 
+                        (result.donorNameUnique ? ChatColor.GREEN + "✓ YES" : ChatColor.YELLOW + "⚠ MAYBE"));
+                    
+                    // Team
+                    sender.sendMessage(ChatColor.GREEN + "Team Valid: " + 
+                        (result.teamExists ? ChatColor.GREEN + "✓ YES" : ChatColor.YELLOW + "⚠ CHECK"));
+                    
+                    // API
+                    sender.sendMessage(ChatColor.GREEN + "FAH API Accessible: " + 
+                        (result.apiAccessible ? ChatColor.GREEN + "✓ YES" : ChatColor.RED + "✗ NO"));
+                    
+                    // Overall status
+                    sender.sendMessage("");
+                    if (result.isHealthy()) {
+                        sender.sendMessage(ChatColor.GREEN + "✓ Overall Status: HEALTHY");
+                        sender.sendMessage(ChatColor.GREEN + "Your configuration should work correctly!");
+                    } else {
+                        sender.sendMessage(ChatColor.RED + "⚠ Overall Status: ISSUES DETECTED");
+                        sender.sendMessage(ChatColor.YELLOW + "Check the console logs for detailed error messages.");
+                        
+                        if (!result.tokenValid) {
+                            sender.sendMessage(ChatColor.RED + "→ Fix your token in config.yml");
+                        }
+                        if (!result.internetConnected) {
+                            sender.sendMessage(ChatColor.RED + "→ Check internet connection and firewall");
+                        }
+                        if (!result.donorNameUnique) {
+                            sender.sendMessage(ChatColor.YELLOW + "→ Consider using a more unique donor name");
+                        }
+                    }
+                });
+            })
+            .exceptionally(throwable -> {
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    sender.sendMessage(ChatColor.RED + "Diagnostic failed: " + throwable.getMessage());
+                });
+                return null;
+            });
     }
 }

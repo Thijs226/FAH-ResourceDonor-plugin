@@ -75,6 +75,15 @@ public class FAHResourceDonor extends JavaPlugin {
         if (fahToken.isEmpty()) {
             getLogger().warning("FAH token is not configured! Please set 'fah.token' in config.yml");
             getLogger().warning("Get your token from: https://apps.foldingathome.org/getpasskey");
+            getLogger().warning("Without a token, your contributions will NOT be credited to your account!");
+        } else {
+            // Validate token format
+            if (fahToken.length() < 32) {
+                getLogger().warning("FAH token appears to be too short - make sure you copied the full passkey");
+            }
+            if (!fahToken.matches("^[a-fA-F0-9]+$")) {
+                getLogger().warning("FAH token contains invalid characters - should only contain letters and numbers");
+            }
         }
         
         if (debugMode) {

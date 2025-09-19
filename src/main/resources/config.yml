@@ -2,37 +2,51 @@
 # 
 # This plugin donates your Minecraft server's idle resources to Folding@Home
 # to help with medical research like cancer, Alzheimer's, and other diseases.
+#
+# 🚨 IMPORTANT: You MUST configure your token for this to work!
+#    Get one from: https://apps.foldingathome.org/getpasskey
 
 # Folding@Home Configuration
 fah:
   # Your Folding@Home passkey/token (REQUIRED)
   # Get one from: https://apps.foldingathome.org/getpasskey
   # This identifies your contributions and earns you points
+  # Example: "a1b2c3d4e5f6789012345678901234ab"
   token: ""
   
   # Team ID to join (optional, default: 0 for no team)
   # Find teams at: https://stats.foldingathome.org/teams
+  # Popular teams: 223518 (LinusTechTips), 52737 (Reddit), 1 (Folding@Home)
   team: "0"
   
   # Your donor name (will appear in FAH statistics)
   # This should be unique to identify your contributions
+  # Avoid common names - try something like "YourName_MC" or "ServerName_FAH"
   donor-name: "MinecraftServer"
   
   # How often to check FAH status (in seconds)
-  # Default: 300 (5 minutes)
+  # Default: 300 (5 minutes) - don't set too low or you'll spam the servers
   check-interval: 300
 
 # Debug mode - enables detailed logging
 # Set to true when troubleshooting issues
+# Shows work unit progress, connection attempts, and error details
 debug: false
 
-# Resource limits (planned for future versions)
+# Performance settings (planned for future versions)
+# These help ensure folding doesn't impact gameplay
 resource-limits:
   # Maximum CPU usage percentage (0-100)
+  # Lower values reduce impact on gameplay
   max-cpu: 50
   
   # Maximum memory usage in MB
+  # Keep reasonable to avoid OutOfMemory errors
   max-memory: 512
   
   # Only fold when server TPS is above this threshold
+  # Pauses folding if server is struggling
   min-tps: 18.0
+  
+  # Pause folding when players are online (future feature)
+  pause-when-players-online: false
