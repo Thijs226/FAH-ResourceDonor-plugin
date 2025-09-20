@@ -1,0 +1,100 @@
+# Test Configuration for FAH ResourceDonor Plugin
+# This file demonstrates a working configuration
+
+# Legacy Configuration Support (WORKING - tested with old code)
+fah:
+  # Test token - replace with your real passkey from https://apps.foldingathome.org/getpasskey
+  token: "test_simulation_token_12345678901234567890123456789012"
+  
+  # Thijs226's team (you can change this to your team)
+  team: "1067089"
+  
+  # Your server's donor name (appears in FAH stats)
+  donor-name: "TestMinecraftServer"
+  
+  # How often to check status (5 minutes = 300 seconds)
+  check-interval: 300
+
+folding-at-home:
+  # Automatic Installation - enable if you want to try real FAH client
+  auto-install: false
+  
+  # Port Configuration (IMPORTANT for hosted servers!)
+  ports:
+    # Set to 0 for shared hosting - this is fine for simulation mode
+    control-port: 0
+    web-port: 0
+    no-port-mode: "file-based"
+  
+  # Account Details (NEW FORMAT - also supported)
+  account:
+    # Your Folding@home username
+    username: ""
+    
+    # Your team ID  
+    team-id: ""
+    
+    # Your passkey for bonus points
+    passkey: ""
+    
+    # Account token (alternative to passkey)
+    account-token: ""
+    
+    # Machine name
+    machine-name: "Minecraft-Server"
+    
+    # Anonymous mode
+    anonymous: false
+  
+  # Research Cause Preference
+  cause-preference:
+    primary: "COVID-19"
+    secondary: "HIGH_PRIORITY"
+    allow-any-fallback: true
+  
+  # Default account (fallback)
+  default-account:
+    username: "Anonymous"
+    team-id: "1067089"
+    
+  # Democratic features
+  democratic-cause:
+    enabled: true
+    vote-command: true
+    auto-switch: true
+    vote-period: 24
+
+server:
+  # Server CPU configuration
+  total-cores: 4
+  reserved-cores: 1
+  
+  # Environment detection
+  environment:
+    auto-detect: true
+    platform: "auto"
+    strict-limits: true
+
+allocation:
+  # How to allocate cores
+  mode: "dynamic"
+  
+  # Dynamic allocation
+  dynamic:
+    cores-per-player: 0.5
+    min-cores-for-minecraft: 1
+    max-cores-for-fah: 3
+
+monitoring:
+  check-interval: 30
+  grace-period: 60
+  tps-monitoring: true
+  min-tps: 18.0
+  
+statistics:
+  enabled: true
+  show-on-join: true
+  broadcast-milestones: true
+
+# Debug mode - shows detailed FAH status and progress
+debug: true
