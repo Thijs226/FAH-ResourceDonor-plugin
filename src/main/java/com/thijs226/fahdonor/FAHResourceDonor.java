@@ -638,16 +638,4 @@ public class FAHResourceDonor extends JavaPlugin {
     public EnhancedLogger getEnhancedLogger() {
         return enhancedLogger;
     }
-    
-    public LeaderboardManager getLeaderboardManager() {
-        return leaderboardManager;
-    }
-    
-    public ScheduleManager getScheduleManager() {
-        return scheduleManager;
-    }
-    
-    public HealthMonitor getHealthMonitor() {
-        return healthMonitor;
-    }
 }
