@@ -638,7 +638,7 @@ public class FAHResourceDonor extends JavaPlugin {
     public EnhancedLogger getEnhancedLogger() {
         return enhancedLogger;
     }
-}
+    
     public LeaderboardManager getLeaderboardManager() {
         return leaderboardManager;
     }
