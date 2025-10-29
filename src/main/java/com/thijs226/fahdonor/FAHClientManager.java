@@ -644,6 +644,7 @@ public class FAHClientManager {
     private synchronized void setCoresFileMode(int cores) {
         try {
             plugin.getLogger().info(() -> String.format("Applying file-based FAH core allocation: %d cores", cores));
+            plugin.getLogger().info("Using CLI commands to avoid restart when possible");
 
             CliCommandResult commandResult;
             if (cores == 0) {
@@ -664,23 +665,25 @@ public class FAHClientManager {
             }
 
             if (commandResult == CliCommandResult.RETRY_LATER) {
-                plugin.getLogger().info("Deferring core adjustment until CLI backoff expires to avoid interrupting FAH work unit.");
+                plugin.getLogger().info("Deferring core adjustment to preserve current work unit.");
                 return;
             }
 
             if (commandResult == CliCommandResult.APPLIED) {
                 syncConfigCpuSetting(cores);
                 currentCores = Math.max(cores, 0);
+                plugin.getLogger().info(() -> String.format("Successfully applied %d cores via CLI (no restart needed)", cores));
                 return;
             }
 
             // commandResult == FAILED
             if (cliFailureStreak.get() < 3) {
-                plugin.getLogger().warning("FAH CLI command failed; will retry later without restarting to preserve the current work unit.");
+                plugin.getLogger().warning("FAH CLI command failed; will retry later to preserve work unit.");
                 return;
             }
 
-            plugin.getLogger().warning("FAH CLI command repeatedly failed; falling back to process restart to enforce core change.");
+            plugin.getLogger().warning("FAH CLI repeatedly failed; restarting FAH process to enforce core change.");
+            plugin.getLogger().info("Note: On single-port servers, FAH restart is sometimes necessary for core changes");
             syncConfigCpuSetting(cores);
             if (cores <= 0) {
                 stopFahProcessForFileMode();
