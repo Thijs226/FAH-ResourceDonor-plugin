@@ -1287,12 +1287,25 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
             String status = plugin.getFAHClient().getWorkUnitStatus();
             String progress = plugin.getFAHClient().getProgress();
             long points = plugin.getFAHClient().getPointsEarned();
+            int completedUnits = plugin.getFAHClient().getCompletedWorkUnits();
+            double coreHours = plugin.getFAHClient().getTotalCoreHours();
+            long failures = plugin.getFAHClient().getTotalFailures();
+            int consecutiveFailures = plugin.getFAHClient().getConsecutiveFailures();
             
             sender.sendMessage(ChatColor.YELLOW + "Status: " + 
                 (running ? ChatColor.GREEN + "Running" : ChatColor.RED + "Stopped"));
             sender.sendMessage(ChatColor.YELLOW + "Work Unit: " + ChatColor.WHITE + status);
             sender.sendMessage(ChatColor.YELLOW + "Progress: " + ChatColor.WHITE + progress);
             sender.sendMessage(ChatColor.YELLOW + "Points Earned: " + ChatColor.WHITE + points);
+            sender.sendMessage(ChatColor.YELLOW + "Completed Units: " + ChatColor.WHITE + completedUnits);
+            sender.sendMessage(ChatColor.YELLOW + "Core Hours: " + ChatColor.WHITE + String.format("%.2f", coreHours));
+            if (failures > 0) {
+                sender.sendMessage(ChatColor.YELLOW + "Core Failures: " + ChatColor.WHITE + failures +
+                        (consecutiveFailures > 0 ? ChatColor.RED + " (" + consecutiveFailures + " consecutive)" : ""));
+            }
+            if (plugin.getFAHClient().isAutoRestartSuppressed()) {
+                sender.sendMessage(ChatColor.RED + "Auto-restart disabled due to repeated core failures. Check console logs.");
+            }
             
             // Connection test
             boolean connected = plugin.getFAHClient().testConnection();
@@ -1305,13 +1318,19 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
         // Configuration info
         String username = plugin.getConfig().getString("folding-at-home.account.username", "");
         String teamId = plugin.getConfig().getString("folding-at-home.account.team-id", "");
-        
-        // Support legacy config
-        if (username.isEmpty()) {
-            username = plugin.getConfig().getString("fah.donor-name", "Not set");
+
+        if (username == null || username.isBlank()) {
+            username = plugin.getConfig().getString("fah.donor-name", "");
         }
-        if (teamId.isEmpty()) {
-            teamId = plugin.getConfig().getString("fah.team", "Not set");
+        if (username == null || username.isBlank()) {
+            username = "Not set";
+        }
+
+        if (teamId == null || teamId.isBlank()) {
+            teamId = plugin.getConfig().getString("fah.team", "");
+        }
+        if (teamId == null || teamId.isBlank()) {
+            teamId = "Not set";
         }
         
         sender.sendMessage(ChatColor.YELLOW + "Donor: " + ChatColor.WHITE + username);

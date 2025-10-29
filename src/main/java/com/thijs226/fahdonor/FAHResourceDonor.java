@@ -1,15 +1,35 @@
 package com.thijs226.fahdonor;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 
+import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
+import org.bukkit.command.ConsoleCommandSender;
+import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.HandlerList;
+import org.bukkit.event.Listener;
+import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import com.thijs226.fahdonor.commands.FAHCommands;
 import com.thijs226.fahdonor.environment.PlatformResourceManager;
+import com.thijs226.fahdonor.health.HealthMonitor;
+import com.thijs226.fahdonor.leaderboard.LeaderboardManager;
+import com.thijs226.fahdonor.metrics.PerformanceMetrics;
+import com.thijs226.fahdonor.rewards.RewardManager;
+import com.thijs226.fahdonor.scheduling.ScheduleManager;
 import com.thijs226.fahdonor.voting.CauseVotingManager;
+
+import net.md_5.bungee.api.ChatMessageType;
+import net.md_5.bungee.api.chat.TextComponent;
 
 public class FAHResourceDonor extends JavaPlugin {
     private static FAHResourceDonor instance;
@@ -20,10 +40,16 @@ public class FAHResourceDonor extends JavaPlugin {
     private StatisticsManager statisticsManager;
     private CauseVotingManager votingManager;
     private PlatformResourceManager platformManager;
+    private PerformanceMetrics performanceMetrics;
+    private RewardManager rewardManager;
+    private LeaderboardManager leaderboardManager;
+    private ScheduleManager scheduleManager;
+    private HealthMonitor healthMonitor;
     private BukkitRunnable statusChecker;
     private String teamId = "";
-    private String userName = "Thijs226_MCServer";
     private boolean isRunning = false;
+    private boolean startupCompleted = false;
+    private LicenseAgreementListener licenseAgreementListener;
 
     // Resolved account configuration (single source of truth)
     private record AccountConfig(String username, String teamId, String token) {}
@@ -83,25 +109,34 @@ public class FAHResourceDonor extends JavaPlugin {
         // Load configuration
         saveDefaultConfig();
         configManager = new ConfigManager(this);
-        
+
+        if (!ensureLicenseAccepted()) {
+            return;
+        }
+
+        continueStartup();
+    }
+
+    private void continueStartup() {
+        if (startupCompleted) {
+            return;
+        }
+        startupCompleted = true;
+
         // Initialize platform/environment detection and management
         platformManager = new PlatformResourceManager(this);
+
+        // Resolve account early for visibility and consistency
+        AccountConfig account = resolveAccountConfig();
+        this.teamId = account.teamId();
+
+        // Check for account configuration
+        checkAccountConfiguration();
         
-    // Resolve account early for visibility and consistency
-    AccountConfig account = resolveAccountConfig();
-    this.teamId = account.teamId();
-    this.userName = account.username();
+    // Log environment-specific recommendations
+    platformManager.logEnvironmentRecommendations();
         
-    // Check for account configuration
-    checkAccountConfiguration();
-        
-        // Log environment-specific recommendations
-        platformManager.logEnvironmentRecommendations();
-        
-        // Initialize FAH Client for actual work unit processing
-        fahClient = new FAHClient(this);
-        
-        // Check and install FAH if needed
+    // Check and install FAH if needed
         boolean fahAvailable = true;
         if (!isFAHInstalled()) {
             if (getConfig().getBoolean("folding-at-home.auto-install", true)) {
@@ -127,14 +162,22 @@ public class FAHResourceDonor extends JavaPlugin {
             }
         }
         
-        // Initialize managers with platform awareness
-        fahManager = new FAHClientManager(this, platformManager);
-        playerMonitor = new PlayerMonitor(this, fahManager, platformManager);
-        statisticsManager = new StatisticsManager(this);
+    // Initialize managers with platform awareness
+    fahManager = new FAHClientManager(this, platformManager);
+    fahClient = new FAHClient(this, fahManager);
+    playerMonitor = new PlayerMonitor(this, fahManager, platformManager);
+    statisticsManager = new StatisticsManager(this, fahClient);
         votingManager = new CauseVotingManager(this);
         
-    // Start the actual FAH service
-    startFAHService();
+        // Initialize new enhancement systems
+        performanceMetrics = new PerformanceMetrics(this);
+        rewardManager = new RewardManager(this);
+        leaderboardManager = new LeaderboardManager(this);
+        scheduleManager = new ScheduleManager(this);
+        healthMonitor = new HealthMonitor(this);
+        
+        // Start the actual FAH service
+        startFAHService();
         
         // Register commands
     org.bukkit.command.PluginCommand fahCommand = getCommand("fah");
@@ -146,6 +189,17 @@ public class FAHResourceDonor extends JavaPlugin {
         
         // Start monitoring
         playerMonitor.start();
+        
+        // Start enhancement systems
+        if (getConfig().getBoolean("scheduling.enabled", false)) {
+            scheduleManager.start();
+            getLogger().info("Schedule manager started");
+        }
+        
+        if (getConfig().getBoolean("health-monitoring.enabled", true)) {
+            healthMonitor.start();
+            getLogger().info("Health monitor started");
+        }
         
         // Start status checker for FAH client
         startStatusChecker();
@@ -203,11 +257,27 @@ public class FAHResourceDonor extends JavaPlugin {
     
     @Override
     public void onDisable() {
+        if (licenseAgreementListener != null) {
+            HandlerList.unregisterAll(licenseAgreementListener);
+            licenseAgreementListener = null;
+        }
         if (statusChecker != null) {
             statusChecker.cancel();
         }
         if (playerMonitor != null) {
             playerMonitor.stop();
+        }
+        if (scheduleManager != null) {
+            scheduleManager.stop();
+        }
+        if (healthMonitor != null) {
+            healthMonitor.stop();
+        }
+        if (rewardManager != null) {
+            rewardManager.saveContributions();
+        }
+        if (leaderboardManager != null) {
+            leaderboardManager.saveLeaderboard();
         }
         if (fahManager != null) {
             fahManager.shutdown();
@@ -219,6 +289,82 @@ public class FAHResourceDonor extends JavaPlugin {
             votingManager.saveVotes();
         }
         getLogger().info("FAH ResourceDonor plugin has been disabled!");
+    }
+
+    private boolean ensureLicenseAccepted() {
+        if (isLicenseAccepted()) {
+            return true;
+        }
+
+        if (!getDataFolder().exists() && !getDataFolder().mkdirs()) {
+            getLogger().severe("Unable to create plugin data folder to record licence acceptance.");
+        }
+
+        getLogger().warning("================================================================================");
+        getLogger().warning("FAH Resource Donor needs your consent before installing Folding@home components.");
+        getLogger().warning("By typing 'I agree' in the server console you confirm that:");
+        getLogger().warning(" - Folding@home may be installed on this machine by this plugin");
+        getLogger().warning(" - You accept the Folding@home client GPL-3.0 licence:" +
+                " https://github.com/FoldingAtHome/fah-client-bastet?tab=GPL-3.0-1-ov-file#readme");
+        getLogger().warning("");
+    getLogger().warning("Please type exactly: I agree");
+    getLogger().warning("Startup will continue automatically once acceptance is recorded.");
+        getLogger().warning("================================================================================");
+
+        if (licenseAgreementListener == null) {
+            licenseAgreementListener = new LicenseAgreementListener();
+            getServer().getPluginManager().registerEvents(licenseAgreementListener, this);
+        }
+
+        return false;
+    }
+
+    private boolean isLicenseAccepted() {
+        Path acceptanceFile = getLicenseAcceptanceFile();
+        return Files.exists(acceptanceFile);
+    }
+
+    private void markLicenseAccepted() {
+        Path acceptanceFile = getLicenseAcceptanceFile();
+        try {
+            Files.createDirectories(acceptanceFile.getParent());
+            Files.writeString(acceptanceFile,
+                    "I agree to install Folding@home and accept the GPL-3.0 licence." + System.lineSeparator(),
+                    StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            getLogger().log(Level.SEVERE, "Failed to persist licence acceptance.", e);
+        }
+    }
+
+    private Path getLicenseAcceptanceFile() {
+        return getDataFolder().toPath().resolve("license.accepted");
+    }
+
+    private class LicenseAgreementListener implements Listener {
+        @EventHandler
+        public void onServerCommand(ServerCommandEvent event) {
+            if (!(event.getSender() instanceof ConsoleCommandSender)) {
+                return;
+            }
+
+            String command = event.getCommand().trim();
+            if (!command.equalsIgnoreCase("I agree")) {
+                return;
+            }
+
+            event.setCancelled(true);
+            HandlerList.unregisterAll(this);
+            licenseAgreementListener = null;
+
+            markLicenseAccepted();
+            getLogger().info("Licence acceptance recorded. Continuing Folding@home setup...");
+
+            Bukkit.getScheduler().runTask(FAHResourceDonor.this, () -> {
+                if (!startupCompleted) {
+                    continueStartup();
+                }
+            });
+        }
     }
     
     private void startFAHService() {
@@ -260,18 +406,30 @@ public class FAHResourceDonor extends JavaPlugin {
                             String status = fahClient.getWorkUnitStatus();
                             String progress = fahClient.getProgress();
                             boolean debugMode = getConfig().getBoolean("debug", false);
-                            
+
                             if (debugMode) {
+                                long points = fahClient.getPointsEarned();
+                                int completedUnits = fahClient.getCompletedWorkUnits();
+                                double coreHours = fahClient.getTotalCoreHours();
                                 getLogger().info(() -> "FAH Status Check:");
                                 getLogger().info(() -> String.format("  Status: %s", status));
                                 getLogger().info(() -> String.format("  Progress: %s", progress));
-                                getLogger().info(() -> String.format("  Points earned: %d", fahClient.getPointsEarned()));
+                                getLogger().info(() -> String.format("  Completed units: %d", completedUnits));
+                                getLogger().info(() -> String.format("  Points earned: %,d", points));
+                                getLogger().info(() -> String.format("  Core hours contributed: %.2f", coreHours));
                             }
-                            
-                            // Check if we're actually processing work
-                            if (!fahClient.isProcessingWork()) {
-                                getLogger().info(() -> "FAH client requesting new work unit...");
-                                fahClient.requestWorkUnit();
+
+                            if (!fahClient.isProcessingWork() && fahManager != null && fahManager.isFAHRunning()) {
+                                if (fahClient.isAutoRestartSuppressed()) {
+                                    if (debugMode) {
+                                        getLogger().info("FAH auto-restart suppressed after repeated failures. Waiting for admin intervention.");
+                                    }
+                                } else {
+                                    if (debugMode) {
+                                        getLogger().info("FAH client idle; requesting new work assignment.");
+                                    }
+                                    fahClient.requestWorkUnit();
+                                }
                             }
                             
                         } catch (RuntimeException e) {
@@ -344,5 +502,68 @@ public class FAHResourceDonor extends JavaPlugin {
         }
         
         getLogger().info("Configuration reloaded!");
+    }
+
+    public void notifyAdmins(String message, ChatColor color, boolean logToConsole) {
+        Runnable task = () -> {
+            String chatMessage = ChatColor.GOLD + "[FAH] " + color + message;
+            boolean chatEnabled = getConfig().getBoolean("monitoring.admin-alerts.broadcast-messages", true);
+            boolean actionbarEnabled = getConfig().getBoolean("monitoring.admin-alerts.actionbar-enabled", false);
+
+            for (Player player : Bukkit.getOnlinePlayers()) {
+                if (!player.hasPermission("fahdonor.admin")) {
+                    continue;
+                }
+                if (chatEnabled) {
+                    player.sendMessage(chatMessage);
+                }
+                if (actionbarEnabled) {
+                    sendActionBar(player, chatMessage);
+                }
+            }
+        };
+
+        if (Bukkit.isPrimaryThread()) {
+            task.run();
+        } else {
+            Bukkit.getScheduler().runTask(this, task);
+        }
+
+        if (logToConsole) {
+            getLogger().info(ChatColor.stripColor(ChatColor.GOLD + "[FAH] " + color + message));
+        }
+    }
+
+    private void sendActionBar(Player player, String message) {
+        try {
+            player.spigot().sendMessage(ChatMessageType.ACTION_BAR, TextComponent.fromLegacyText(message));
+        } catch (NoSuchMethodError | NoClassDefFoundError ex) {
+            // Ignore if action bar API not available on this server version.
+        }
+    }
+
+    public boolean isStructuredLoggingEnabled() {
+        return getConfig().getBoolean("monitoring.structured-logging.enabled", false);
+    }
+    
+    // Getters for new enhancement systems
+    public PerformanceMetrics getPerformanceMetrics() {
+        return performanceMetrics;
+    }
+    
+    public RewardManager getRewardManager() {
+        return rewardManager;
+    }
+    
+    public LeaderboardManager getLeaderboardManager() {
+        return leaderboardManager;
+    }
+    
+    public ScheduleManager getScheduleManager() {
+        return scheduleManager;
+    }
+    
+    public HealthMonitor getHealthMonitor() {
+        return healthMonitor;
     }
 }

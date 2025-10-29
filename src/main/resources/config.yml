@@ -1,6 +1,8 @@
 # FAH Resource Donor Configuration
 # By Thijs226 - Donate unused server resources to Folding@home
 
+config-version: 2
+
 # Legacy Configuration Support (for backward compatibility)
 # These settings are supported for users upgrading from older versions
 fah:
@@ -178,6 +180,8 @@ allocation:
 monitoring:
   # Check interval (seconds)
   check-interval: 30
+  # How often the FAH status poller runs (ticks)
+  status-refresh-interval: 200
   
   # Grace period (seconds)
   grace-period: 60
@@ -185,6 +189,20 @@ monitoring:
   # TPS monitoring
   tps-monitoring: true
   min-tps: 18.0
+  
+  log-watchdog:
+    # Time (seconds) without new FAH log entries before alerting admins
+    stall-threshold-seconds: 180
+
+  admin-alerts:
+    # Send chat messages to admins when FAH changes state
+    broadcast-messages: true
+    # Additionally send actionbar notifications (may require Paper/Spigot API)
+    actionbar-enabled: false
+
+  structured-logging:
+    # Emit JSON-formatted status updates to the console/logs
+    enabled: false
   
 statistics:
   # Track statistics
@@ -201,3 +219,157 @@ auto-update: true
 
 # Debug logging (shows FAH output and detailed status)
 debug: true
+
+# =============================================================================
+# ENHANCEMENT FEATURES
+# =============================================================================
+
+# Rewards System - Give players rewards based on their contribution
+rewards:
+  enabled: true
+  
+  # Time-based rewards (hours of contribution)
+  time-based:
+    bronze:
+      hours: 1
+      name: "Bronze Contributor"
+      commands:
+        - "give {player} diamond 5"
+      message: "&a&lREWARD! &7You've earned &eBronze Contributor &7status! (+5 diamonds)"
+    
+    silver:
+      hours: 10
+      name: "Silver Contributor"
+      commands:
+        - "give {player} diamond 10"
+        - "give {player} emerald 5"
+      message: "&a&lREWARD! &7You've earned &eSilver Contributor &7status! (+10 diamonds, +5 emeralds)"
+    
+    gold:
+      hours: 50
+      name: "Gold Contributor"
+      commands:
+        - "give {player} diamond 20"
+        - "give {player} emerald 10"
+        - "give {player} netherite_ingot 1"
+      message: "&a&lREWARD! &7You've earned &eGold Contributor &7status! (+20 diamonds, +10 emeralds, +1 netherite)"
+  
+  # Points-based rewards
+  points-based:
+    milestone_1000:
+      points: 1000
+      name: "1K Points"
+      commands:
+        - "give {player} diamond 3"
+      message: "&a&lMILESTONE! &7You've earned &e1,000 points &7for medical research! (+3 diamonds)"
+    
+    milestone_10000:
+      points: 10000
+      name: "10K Points"
+      commands:
+        - "give {player} diamond 15"
+        - "give {player} emerald 5"
+      message: "&a&lMILESTONE! &7You've earned &e10,000 points &7for medical research! (+15 diamonds, +5 emeralds)"
+    
+    milestone_100000:
+      points: 100000
+      name: "100K Points"
+      commands:
+        - "give {player} netherite_ingot 3"
+      message: "&a&lMILESTONE! &7You've earned &e100,000 points &7for medical research! (+3 netherite ingots)"
+  
+  # Work unit completion rewards
+  workunit-based:
+    first_unit:
+      units: 1
+      name: "First Work Unit"
+      commands:
+        - "give {player} diamond 2"
+      message: "&a&lFIRST CONTRIBUTION! &7You've completed your first work unit! (+2 diamonds)"
+    
+    ten_units:
+      units: 10
+      name: "10 Work Units"
+      commands:
+        - "give {player} diamond 5"
+      message: "&a&lMILESTONE! &7You've completed &e10 work units! &7(+5 diamonds)"
+    
+    hundred_units:
+      units: 100
+      name: "100 Work Units"
+      commands:
+        - "give {player} diamond 20"
+        - "give {player} netherite_ingot 2"
+      message: "&a&lMILESTONE! &7You've completed &e100 work units! &7(+20 diamonds, +2 netherite)"
+
+# Leaderboard System
+leaderboard:
+  enabled: true
+  
+  # Auto-broadcast leaderboard
+  auto-broadcast:
+    enabled: true
+    interval-hours: 6
+    type: "points"  # points, time, workunits, efficiency
+    limit: 10
+
+# Advanced Scheduling - Fold during specific hours
+scheduling:
+  enabled: false
+  
+  # Off-peak hours (when to use MORE resources)
+  off-peak-start: "22:00"  # 10 PM
+  off-peak-end: "06:00"    # 6 AM
+  
+  # Days to apply schedule (MONDAY, TUESDAY, etc.)
+  active-days:
+    - MONDAY
+    - TUESDAY
+    - WEDNESDAY
+    - THURSDAY
+    - FRIDAY
+    - SATURDAY
+    - SUNDAY
+  
+  # Core allocation during different times
+  cores-off-peak: 4  # Use more cores during off-peak
+  cores-peak: 1      # Use fewer cores during peak hours
+
+# Health Monitoring & Auto-Recovery
+health-monitoring:
+  enabled: true
+  
+  # How often to check health (seconds)
+  check-interval-seconds: 60
+  
+  # Automatic recovery if problems detected
+  auto-recovery: true
+  
+  # Number of failed checks before attempting recovery
+  recovery-threshold: 3
+  
+  # Maximum recovery attempts before giving up
+  max-recovery-attempts: 3
+  
+  # Time (seconds) without activity before considering "stalled"
+  stalled-threshold-seconds: 300
+
+# Performance Tracking
+performance-tracking:
+  enabled: true
+  
+  # Track CPU usage (requires system permissions)
+  track-cpu: true
+  
+  # Track memory usage
+  track-memory: true
+  
+  # Auto-generate performance reports
+  auto-report:
+    enabled: false
+    interval-hours: 24
+
+# Data storage (managed automatically)
+data:
+  contributions: {}
+  leaderboard: {}

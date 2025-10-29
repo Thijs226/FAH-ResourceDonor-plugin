@@ -23,6 +23,7 @@ public class PlayerMonitor implements Listener {
     private long lastChange = 0;
     private Method tpsMethod = null;
     private boolean registered = false;
+    private boolean suppressionNotified = false;
     
     public PlayerMonitor(FAHResourceDonor plugin, FAHClientManager fahManager) {
         this(plugin, fahManager, null);
@@ -76,15 +77,15 @@ public class PlayerMonitor implements Listener {
         if (event.getPlayer().hasPermission("fahdonor.admin")) {
             String username = plugin.getConfig().getString("folding-at-home.account.username", "");
             String passkey = plugin.getConfig().getString("folding-at-home.account.passkey", "");
-            
-            if (username.isEmpty()) {
+
+            if (username == null || username.isEmpty()) {
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     event.getPlayer().sendMessage(ChatColor.GOLD + "[FAH] " + ChatColor.YELLOW + 
                         "Folding@home account not configured! Use: /fah setup");
                     event.getPlayer().sendMessage(ChatColor.GRAY + 
                         "Your server's contributions aren't being tracked!");
                 }, 60L); // 3 seconds after join
-            } else if (passkey.isEmpty()) {
+            } else if (passkey == null || passkey.isEmpty()) {
                 Bukkit.getScheduler().runTaskLater(plugin, () -> {
                     event.getPlayer().sendMessage(ChatColor.GOLD + "[FAH] " + ChatColor.YELLOW + 
                         "No passkey configured! Use: /fah passkey <token>");
@@ -119,6 +120,21 @@ public class PlayerMonitor implements Listener {
         }
         
         int cores = calculateOptimalCores(playerCount);
+
+        FAHClient client = plugin.getFAHClient();
+        if (client != null && client.isAutoRestartSuppressed()) {
+            if (cores != 0) {
+                plugin.getLogger().warning("FAH auto-restart suppressed; overriding core allocation to 0 until manual intervention.");
+            }
+            cores = 0;
+            if (!suppressionNotified) {
+                plugin.notifyAdmins("FAH auto-restart suppressed after repeated failures. Core allocation throttled to 0.", ChatColor.RED, true);
+                suppressionNotified = true;
+            }
+        } else if (suppressionNotified) {
+            plugin.notifyAdmins("FAH auto-restart suppression cleared. Automatic core allocation restored.", ChatColor.GREEN, true);
+            suppressionNotified = false;
+        }
         
         if (plugin.getConfig().getBoolean("monitoring.tps-monitoring", true)) {
             double tps = getTPS();
@@ -142,6 +158,7 @@ public class PlayerMonitor implements Listener {
         fahManager.setCores(cores);
         lastPlayerCount = playerCount;
     }
+
     
     private double getTPS() {
         if (tpsMethod != null) {

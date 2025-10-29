@@ -8,13 +8,17 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -35,6 +39,14 @@ public class FAHClientManager {
     private AccountInfo currentAccount;
     private CausePreference currentCause;
     private PlatformResourceManager platformManager;
+    private final AtomicInteger cliFailureStreak = new AtomicInteger(0);
+    private volatile long cliBackoffUntilMillis = 0L;
+
+    private enum CliCommandResult {
+        APPLIED,
+        RETRY_LATER,
+        FAILED
+    }
 
     public enum FoldingCause {
         ANY("ANY", "0", "All diseases - highest priority work"),
@@ -165,6 +177,10 @@ public class FAHClientManager {
     }
 
     private void startFAHClient() {
+        startFAHClient(null);
+    }
+
+    private void startFAHClient(Integer requestedCoreOverride) {
         try {
             // Check if FAH is actually available
             File fahExecutable = new File(fahDirectory, "FAHClient");
@@ -192,7 +208,13 @@ public class FAHClientManager {
             }
 
             // Update config with port settings
-            updateConfigXml(currentAccount, currentCause, controlPort, webPort);
+            int initialCores = requestedCoreOverride != null
+                    ? requestedCoreOverride
+                    : calculateInitialCores(getOnlinePlayerCount());
+            if (initialCores == 1) {
+                initialCores = 0; // avoid running on a single core (pause instead)
+            }
+            updateConfigXml(currentAccount, currentCause, controlPort, webPort, initialCores);
 
             // Build command line arguments
             List<String> command = new ArrayList<>();
@@ -337,7 +359,7 @@ public class FAHClientManager {
         return 25565;
     }
 
-        private void updateConfigXml(AccountInfo account, CausePreference cause, int controlPort, int webPort) throws IOException {
+    private void updateConfigXml(AccountInfo account, CausePreference cause, int controlPort, int webPort, int initialCores) throws IOException {
                 String controlConfig = "";
                 // Control port: if <=0, auto-detect a free one after the Minecraft server port
                 if (controlPort <= 0) {
@@ -350,7 +372,6 @@ public class FAHClientManager {
 
                 // Web interface disabled by default for safety (no extra tags needed)
 
-                int initialCores = calculateInitialCores(Bukkit.getOnlinePlayers().size());
                 if (initialCores == 1) initialCores = 0; // don't run FAH on 1 core
                 String machineName = plugin.getConfig().getString("folding-at-home.account.machine-name", "Minecraft-Server");
                 String accountToken = plugin.getConfig().getString("folding-at-home.account.account-token", "");
@@ -424,7 +445,7 @@ public class FAHClientManager {
     private void updateConfigXml(AccountInfo account, CausePreference cause) throws IOException {
         int controlPort = plugin.getConfig().getInt("folding-at-home.ports.control-port", 36330);
         int webPort = plugin.getConfig().getInt("folding-at-home.ports.web-port", 7396);
-        updateConfigXml(account, cause, controlPort, webPort);
+        updateConfigXml(account, cause, controlPort, webPort, calculateInitialCores(getOnlinePlayerCount()));
     }
 
     public boolean isFAHRunning() {
@@ -523,11 +544,12 @@ public class FAHClientManager {
     int controlPort = plugin.getConfig().getInt("folding-at-home.ports.control-port", 0);
     String noPortMode = plugin.getConfig().getString("folding-at-home.ports.no-port-mode", "file-based");
 
-        if (controlPort == 0 && noPortMode != null && noPortMode.equals("file-based")) {
-            // File-based control for hosts with no ports
-            setCoresFileMode(clamped);
-            return;
-        }
+            if (controlPort == 0 && "file-based".equalsIgnoreCase(noPortMode)) {
+                // File-based control for hosts with no ports; run off the main thread
+                final int targetCores = clamped;
+                executor.execute(() -> setCoresFileMode(targetCores));
+                return;
+            }
 
         final int targetCores = clamped;
         executor.execute(() -> {
@@ -584,54 +606,60 @@ public class FAHClientManager {
         });
     }
 
-    private void setCoresFileMode(int cores) {
-        // For hosts with no ports - restart FAH with new core count
+    private synchronized void setCoresFileMode(int cores) {
         try {
-            plugin.getLogger().info("Updating FAH cores via process restart (no-port mode)");
+            plugin.getLogger().info(() -> String.format("Applying file-based FAH core allocation: %d cores", cores));
 
+            CliCommandResult commandResult;
             if (cores == 0) {
-                // Stop FAH completely
-                if (fahProcess != null && fahProcess.isAlive()) {
-                    plugin.getLogger().info("Stopping FAH - all cores needed for Minecraft");
-                    fahProcess.destroy();
-                    fahProcess = null;
-                }
+                commandResult = sendCommandViaCli("pause");
             } else {
-                // Update config and restart FAH with new core count
-                File configFile = new File(fahDirectory, "config.xml");
-                if (configFile.exists()) {
-                    String config = new String(Files.readAllBytes(configFile.toPath()));
-
-                    // Update the cpus value in config; support both v='x' and value="x" styles
-                    config = config.replaceAll("<cpus v='\\d+'/>", "<cpus v='" + cores + "'/>");
-                    config = config.replaceAll("<cpus value=\"\\d+\"/>", "<cpus value=\"" + cores + "\"/>");
-                    Files.write(configFile.toPath(), config.getBytes());
-
-                    // Restart FAH if it was stopped or core count changed significantly
-                    if (fahProcess == null || !fahProcess.isAlive() || Math.abs(cores - currentCores) > 2) {
-                        if (fahProcess != null && fahProcess.isAlive()) {
-                            plugin.getLogger().info(() -> "Restarting FAH with " + cores + " cores");
-                            fahProcess.destroy();
-                            Thread.sleep(2000);
-                        } else {
-                            plugin.getLogger().info(() -> "Starting FAH with " + cores + " cores");
-                        }
-
-                        // Restart FAH
-                        startFAHClient();
-                    } else {
-                        plugin.getLogger().info(() -> "FAH continues with " + cores + " cores (minor change)");
+                String slotModify = "slot-modify 0 cpus " + cores;
+                commandResult = sendCommandViaCli(slotModify);
+                if (commandResult == CliCommandResult.APPLIED) {
+                    CliCommandResult unpauseResult = sendCommandViaCli("unpause");
+                    if (unpauseResult == CliCommandResult.FAILED && cliFailureStreak.get() >= 3) {
+                        plugin.getLogger().warning("Unable to unpause FAH via CLI after slot modify; forcing restart to recover.");
+                        restartFahProcessForFileMode(cores);
+                        currentCores = cores;
+                        syncConfigCpuSetting(cores);
+                        return;
                     }
                 }
             }
 
-            currentCores = cores;
+            if (commandResult == CliCommandResult.RETRY_LATER) {
+                plugin.getLogger().info("Deferring core adjustment until CLI backoff expires to avoid interrupting FAH work unit.");
+                return;
+            }
+
+            if (commandResult == CliCommandResult.APPLIED) {
+                syncConfigCpuSetting(cores);
+                currentCores = Math.max(cores, 0);
+                return;
+            }
+
+            // commandResult == FAILED
+            if (cliFailureStreak.get() < 3) {
+                plugin.getLogger().warning("FAH CLI command failed; will retry later without restarting to preserve the current work unit.");
+                return;
+            }
+
+            plugin.getLogger().warning("FAH CLI command repeatedly failed; falling back to process restart to enforce core change.");
+            syncConfigCpuSetting(cores);
+            if (cores <= 0) {
+                stopFahProcessForFileMode();
+                currentCores = 0;
+            } else {
+                restartFahProcessForFileMode(cores);
+                currentCores = cores;
+            }
 
         } catch (IOException e) {
             plugin.getLogger().warning(() -> String.format("Failed to update cores in file mode: %s", e.getMessage()));
         } catch (InterruptedException e) {
-            plugin.getLogger().warning(() -> String.format("Interrupted while updating cores in file mode: %s", e.getMessage()));
             Thread.currentThread().interrupt();
+            plugin.getLogger().warning(() -> String.format("Interrupted while updating cores in file mode: %s", e.getMessage()));
         } catch (IllegalStateException | SecurityException e) {
             plugin.getLogger().warning(() -> String.format("Failed to update cores in file mode: %s", e.getMessage()));
         }
@@ -640,7 +668,7 @@ public class FAHClientManager {
         public void reconfigureWithToken(String accountToken, String machineName) {
         try {
                         // Create new config with token (unified with updateConfigXml)
-                        int initialCores = calculateInitialCores(Bukkit.getOnlinePlayers().size());
+                        int initialCores = calculateInitialCores(getOnlinePlayerCount());
                         if (initialCores == 1) initialCores = 0; // pause rather than run at 1
             // control port not used in minimal config
                         // Minimal FAH v8 compatible remote control section
@@ -693,6 +721,76 @@ public class FAHClientManager {
     public void updateAccount(AccountInfo account) {
         this.currentAccount = account;
         reconfigureFAHClient();
+    }
+
+    private File resolveFahExecutable() {
+        File fahExecutable = new File(fahDirectory, "FAHClient");
+        File fahExecutableExe = new File(fahDirectory, "FAHClient.exe");
+
+        if (fahExecutable.exists()) {
+            return fahExecutable;
+        }
+        if (fahExecutableExe.exists()) {
+            return fahExecutableExe;
+        }
+        return null;
+    }
+
+    private CliCommandResult sendCommandViaCli(String command) {
+        File executable = resolveFahExecutable();
+        if (executable == null) {
+            plugin.getLogger().warning("FAH executable not found; cannot send command.");
+            return CliCommandResult.FAILED;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now < cliBackoffUntilMillis) {
+            long remaining = (cliBackoffUntilMillis - now + 999) / 1000;
+            plugin.getLogger().info(() -> String.format("Skipping FAH command '%s' due to backoff (%d s remaining)", command, remaining));
+            return CliCommandResult.RETRY_LATER;
+        }
+
+        ProcessBuilder pb = new ProcessBuilder(executable.getAbsolutePath(), "--send-command=" + command);
+        pb.directory(fahDirectory);
+
+        try {
+            Process process = pb.start();
+            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                plugin.getLogger().warning(() -> "FAH command timed out: " + command);
+                registerCliFailure();
+                return CliCommandResult.FAILED;
+            }
+
+            int exitCode = process.exitValue();
+            if (exitCode == 0) {
+                plugin.getLogger().info(() -> "Sent FAH command: " + command);
+                cliFailureStreak.set(0);
+                cliBackoffUntilMillis = 0L;
+                return CliCommandResult.APPLIED;
+            }
+
+            plugin.getLogger().warning(() -> String.format("FAH command exited with code %d: %s", exitCode, command));
+            registerCliFailure();
+            return CliCommandResult.FAILED;
+        } catch (IOException | InterruptedException e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            plugin.getLogger().warning(() -> "Failed to send FAH command '" + command + "': " + e.getMessage());
+            registerCliFailure();
+            return CliCommandResult.FAILED;
+        }
+    }
+
+    private void registerCliFailure() {
+        int failures = cliFailureStreak.incrementAndGet();
+        long delaySeconds = Math.min(300L, (long) Math.pow(2, Math.min(failures, 8)));
+        cliBackoffUntilMillis = System.currentTimeMillis() + (delaySeconds * 1000L);
+        plugin.getLogger().warning(() -> String.format(
+                "FAH CLI command failed (streak %d). Backing off for %d seconds before retrying.",
+                failures,
+                delaySeconds));
     }
 
     public void updateCause(FoldingCause newCause) {
@@ -766,6 +864,76 @@ public class FAHClientManager {
     public void resetToDefaultAccount() {
         loadAccountConfiguration();
         reconfigureFAHClient();
+    }
+
+    private int getOnlinePlayerCount() {
+        if (Bukkit.isPrimaryThread()) {
+            return Bukkit.getOnlinePlayers().size();
+        }
+
+        try {
+            Future<Integer> future = Bukkit.getScheduler().callSyncMethod(plugin, () -> Bukkit.getOnlinePlayers().size());
+            return future.get(2, TimeUnit.SECONDS);
+        } catch (Exception ex) {
+            plugin.getLogger().log(Level.WARNING, "Unable to query online player count synchronously", ex);
+            return 0;
+        }
+    }
+
+    private void restartFahProcessForFileMode(int cores) throws InterruptedException {
+        stopFahProcessForFileMode();
+        plugin.getLogger().info(() -> "Restarting FAH client with " + cores + " cores (file-based control)");
+        startFAHClient(cores);
+    }
+
+    private void stopFahProcessForFileMode() throws InterruptedException {
+        if (fahProcess != null && fahProcess.isAlive()) {
+            plugin.getLogger().info("Stopping FAH client process (file-based control)");
+            fahProcess.destroy();
+
+            if (!fahProcess.waitFor(10, TimeUnit.SECONDS)) {
+                plugin.getLogger().warning("FAH client did not exit cleanly; forcing termination.");
+                fahProcess.destroyForcibly();
+                fahProcess.waitFor(5, TimeUnit.SECONDS);
+            }
+
+            fahProcess = null;
+        }
+    }
+
+    private String updateCpuAllocation(String configXml, int cores) {
+        String cpuElement = "<cpus v='" + cores + "'/>";
+        String updated = configXml
+                .replaceAll("(?i)<cpus\\s+v=['\"]?\\d+['\"]?\\s*/>", cpuElement)
+                .replaceAll("(?i)<cpus\\s+value=['\"]?\\d+['\"]?\\s*/>", "<cpus value=\"" + cores + "\"/>");
+
+        if (updated.equals(configXml)) {
+            java.util.regex.Pattern slotPattern = java.util.regex.Pattern.compile("(?i)(<slot[^>]*type=['\"]?CPU['\"]?[^>]*>)");
+            java.util.regex.Matcher matcher = slotPattern.matcher(updated);
+            if (matcher.find()) {
+                int insertPos = matcher.end();
+                String insertion = System.lineSeparator() + "        " + cpuElement;
+                updated = new StringBuilder(updated).insert(insertPos, insertion).toString();
+            }
+        }
+
+        return updated;
+    }
+
+    private void syncConfigCpuSetting(int cores) throws IOException {
+        File configFile = new File(fahDirectory, "config.xml");
+        if (!configFile.exists()) {
+            plugin.getLogger().warning("Unable to synchronize FAH config; config.xml missing.");
+            return;
+        }
+
+        String originalConfig = Files.readString(configFile.toPath(), StandardCharsets.UTF_8);
+        String updatedConfig = updateCpuAllocation(originalConfig, Math.max(cores, 2));
+
+        if (!originalConfig.equals(updatedConfig)) {
+            Files.writeString(configFile.toPath(), updatedConfig, StandardCharsets.UTF_8);
+            plugin.getLogger().info(() -> "Synchronized FAH config.xml CPU allocation to " + Math.max(cores, 2) + " cores");
+        }
     }
 
     // Helper used but not defined in original snippet: calculateInitialCores
