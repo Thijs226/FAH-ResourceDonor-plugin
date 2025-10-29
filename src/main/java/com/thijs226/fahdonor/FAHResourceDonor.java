@@ -19,11 +19,14 @@ import org.bukkit.event.server.ServerCommandEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitRunnable;
 
+import com.thijs226.fahdonor.async.AsyncTaskManager;
+import com.thijs226.fahdonor.cache.ConfigCache;
 import com.thijs226.fahdonor.commands.FAHCommands;
 import com.thijs226.fahdonor.environment.PlatformResourceManager;
 import com.thijs226.fahdonor.health.HealthMonitor;
 import com.thijs226.fahdonor.leaderboard.LeaderboardManager;
 import com.thijs226.fahdonor.metrics.PerformanceMetrics;
+import com.thijs226.fahdonor.notifications.NotificationManager;
 import com.thijs226.fahdonor.rewards.RewardManager;
 import com.thijs226.fahdonor.scheduling.ScheduleManager;
 import com.thijs226.fahdonor.voting.CauseVotingManager;
@@ -46,6 +49,12 @@ public class FAHResourceDonor extends JavaPlugin {
     private ScheduleManager scheduleManager;
     private HealthMonitor healthMonitor;
     private BukkitRunnable statusChecker;
+    
+    // Enhanced systems
+    private AsyncTaskManager asyncTaskManager;
+    private NotificationManager notificationManager;
+    private ConfigCache<String, Object> configCache;
+    
     private String teamId = "";
     private boolean isRunning = false;
     private boolean startupCompleted = false;
@@ -123,6 +132,12 @@ public class FAHResourceDonor extends JavaPlugin {
         }
         startupCompleted = true;
 
+        // Initialize enhanced systems first
+        getLogger().info("Initializing enhanced systems...");
+        asyncTaskManager = new AsyncTaskManager(this, 4); // 4 thread pool
+        notificationManager = new NotificationManager(this);
+        configCache = new ConfigCache<>(5, java.util.concurrent.TimeUnit.MINUTES);
+        
         // Initialize platform/environment detection and management
         platformManager = new PlatformResourceManager(this);
 
@@ -257,6 +272,19 @@ public class FAHResourceDonor extends JavaPlugin {
     
     @Override
     public void onDisable() {
+        getLogger().info("Shutting down FAH ResourceDonor...");
+        
+        // Cleanup enhanced systems first
+        if (notificationManager != null) {
+            notificationManager.cleanup();
+        }
+        if (asyncTaskManager != null) {
+            asyncTaskManager.shutdown();
+        }
+        if (configCache != null) {
+            configCache.invalidateAll();
+        }
+        
         if (licenseAgreementListener != null) {
             HandlerList.unregisterAll(licenseAgreementListener);
             licenseAgreementListener = null;
@@ -546,12 +574,39 @@ public class FAHResourceDonor extends JavaPlugin {
         return getConfig().getBoolean("monitoring.structured-logging.enabled", false);
     }
     
-    // Getters for new enhancement systems
+    // Getters for enhancement systems
     public PerformanceMetrics getPerformanceMetrics() {
         return performanceMetrics;
     }
     
     public RewardManager getRewardManager() {
+        return rewardManager;
+    }
+    
+    public LeaderboardManager getLeaderboardManager() {
+        return leaderboardManager;
+    }
+    
+    public ScheduleManager getScheduleManager() {
+        return scheduleManager;
+    }
+    
+    public HealthMonitor getHealthMonitor() {
+        return healthMonitor;
+    }
+    
+    // Getters for new enhanced systems
+    public AsyncTaskManager getAsyncTaskManager() {
+        return asyncTaskManager;
+    }
+    
+    public NotificationManager getNotificationManager() {
+        return notificationManager;
+    }
+    
+    public ConfigCache<String, Object> getConfigCache() {
+        return configCache;
+    }
         return rewardManager;
     }
     
