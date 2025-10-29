@@ -25,7 +25,8 @@ All notable changes to the FAH Resource Donor plugin will be documented in this 
   - `enabled`: Auto-start on server boot (default: true)
   - `auto-resume`: Resume work after restart (default: true)
   - `startup-delay`: Configurable delay before starting (default: 30s)
-- **Power settings**: FAH config now includes `power='full'` and `on-idle='false'`
+- **Power settings**: FAH config now includes `power='full'` for maximum performance
+- **Idle settings**: FAH configured to fold continuously (`idle-seconds='0'`)
 - **Unpaused by default**: FAH slots configured with `paused='false'`
 
 #### File-Based Mode Improvements

@@ -199,11 +199,12 @@ cat plugins/FAHResourceDonor/folding-at-home/log.txt
 cat plugins/FAHResourceDonor/fah-state.properties
 ```
 
-Should contain:
-```
+Should contain (example):
+```properties
 cores=4
 running=true
-last-update=1234567890
+last-update=1730195400000
+# last-update is Unix timestamp in milliseconds
 ```
 
 ### Enable Debug Mode
@@ -222,7 +223,17 @@ Reload and check console for detailed FAH output.
 /fah token
 ```
 
-Should show "Token is currently configured"
+Should show:
+```
+Token is currently configured
+Machine name: Minecraft-Server
+```
+
+Or if not configured:
+```
+No token configured yet
+FAH will auto-start once you set a token
+```
 
 ## Reporting Issues
 
