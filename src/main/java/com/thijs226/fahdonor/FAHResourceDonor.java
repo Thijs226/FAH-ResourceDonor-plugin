@@ -22,9 +22,11 @@ import org.bukkit.scheduler.BukkitRunnable;
 import com.thijs226.fahdonor.async.AsyncTaskManager;
 import com.thijs226.fahdonor.cache.ConfigCache;
 import com.thijs226.fahdonor.commands.FAHCommands;
+import com.thijs226.fahdonor.database.DatabaseManager;
 import com.thijs226.fahdonor.environment.PlatformResourceManager;
 import com.thijs226.fahdonor.health.HealthMonitor;
 import com.thijs226.fahdonor.leaderboard.LeaderboardManager;
+import com.thijs226.fahdonor.logging.EnhancedLogger;
 import com.thijs226.fahdonor.metrics.PerformanceMetrics;
 import com.thijs226.fahdonor.notifications.NotificationManager;
 import com.thijs226.fahdonor.rewards.RewardManager;
@@ -54,6 +56,8 @@ public class FAHResourceDonor extends JavaPlugin {
     private AsyncTaskManager asyncTaskManager;
     private NotificationManager notificationManager;
     private ConfigCache<String, Object> configCache;
+    private DatabaseManager databaseManager;
+    private EnhancedLogger enhancedLogger;
     
     private String teamId = "";
     private boolean isRunning = false;
@@ -134,9 +138,21 @@ public class FAHResourceDonor extends JavaPlugin {
 
         // Initialize enhanced systems first
         getLogger().info("Initializing enhanced systems...");
+        enhancedLogger = new EnhancedLogger(this);
+        enhancedLogger.start();
+        enhancedLogger.logConfig(Level.INFO, "Enhanced logging system started");
+        
         asyncTaskManager = new AsyncTaskManager(this, 4); // 4 thread pool
         notificationManager = new NotificationManager(this);
         configCache = new ConfigCache<>(5, java.util.concurrent.TimeUnit.MINUTES);
+        
+        // Initialize database
+        databaseManager = new DatabaseManager(this);
+        if (databaseManager.initialize()) {
+            enhancedLogger.logDatabase(Level.INFO, "Database initialized successfully");
+        } else {
+            enhancedLogger.logDatabase(Level.SEVERE, "Failed to initialize database");
+        }
         
         // Initialize platform/environment detection and management
         platformManager = new PlatformResourceManager(this);
@@ -275,6 +291,13 @@ public class FAHResourceDonor extends JavaPlugin {
         getLogger().info("Shutting down FAH ResourceDonor...");
         
         // Cleanup enhanced systems first
+        if (enhancedLogger != null) {
+            enhancedLogger.logConfig(Level.INFO, "Shutting down plugin...");
+            enhancedLogger.stop();
+        }
+        if (databaseManager != null) {
+            databaseManager.close();
+        }
         if (notificationManager != null) {
             notificationManager.cleanup();
         }
@@ -607,9 +630,15 @@ public class FAHResourceDonor extends JavaPlugin {
     public ConfigCache<String, Object> getConfigCache() {
         return configCache;
     }
-        return rewardManager;
+    
+    public DatabaseManager getDatabaseManager() {
+        return databaseManager;
     }
     
+    public EnhancedLogger getEnhancedLogger() {
+        return enhancedLogger;
+    }
+}
     public LeaderboardManager getLeaderboardManager() {
         return leaderboardManager;
     }
