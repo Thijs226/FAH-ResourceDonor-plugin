@@ -25,10 +25,20 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
       
-    - name: Build with Gradle
-      run: ./gradlew clean shadowJar --no-daemon
+    - name: Validate Gradle wrapper
+      run: ./gradlew --version
       
+    - name: Build with Gradle
+      run: ./gradlew clean shadowJar --no-daemon --stacktrace --info
+      
+    - name: List build outputs
+      if: always()
+      run: |
+        echo "📂 Build directory contents:"
+        ls -laR build/ || echo "No build directory found"
+        
     - name: Upload artifact
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: FAHResourceDonor-Plugin
@@ -36,7 +46,18 @@ jobs:
         retention-days: 30
         
     - name: Display build info
+      if: success()
       run: |
         echo "✅ Build completed successfully!"
         echo "📦 JAR file created:"
         ls -lh build/libs/*.jar
+        
+    - name: Upload build logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: |
+          build/reports/
+          ~/.gradle/
+        retention-days: 7
