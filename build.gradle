@@ -26,6 +26,7 @@ repositories {
 
 dependencies {
     compileOnly 'org.spigotmc:spigot-api:1.21-R0.1-SNAPSHOT'
+    implementation 'org.xerial:sqlite-jdbc:3.46.0.0'
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -46,6 +47,9 @@ shadowJar {
     archiveBaseName.set('FAHResourceDonor')
     archiveClassifier.set('')
     archiveVersion.set(version)
+    
+    // Relocate SQLite to avoid conflicts
+    relocate 'org.sqlite', 'com.thijs226.fahdonor.lib.sqlite'
 }
 
 build {
