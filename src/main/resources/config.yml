@@ -24,6 +24,19 @@ folding-at-home:
   # Set to false if you want to install FAH manually
   auto-install: true
   
+  # Auto-Start and Resume Settings
+  # These settings ensure FAH continues working after server restart
+  auto-start:
+    # Automatically start FAH when the server starts
+    enabled: true
+    
+    # Automatically resume work after server restart (preserves state)
+    auto-resume: true
+    
+    # Delay before starting FAH on server boot (seconds)
+    # Gives the server time to fully initialize
+    startup-delay: 30
+  
   # Port Configuration (IMPORTANT for hosted servers!)
   # Most Minecraft hosts only provide ONE port
   ports:
@@ -39,6 +52,7 @@ folding-at-home:
     
     # Run mode when ports are disabled
     # "file-based" = Restart FAH to change cores (works on all hosts)
+    # This mode is optimized for single-port shared hosting
     no-port-mode: "file-based"
   
   # IMPORTANT: Your Folding@home Account Details

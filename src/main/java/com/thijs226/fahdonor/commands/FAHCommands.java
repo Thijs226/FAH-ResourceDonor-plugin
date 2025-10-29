@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
 import java.util.stream.Collectors;
 
 import org.bukkit.Bukkit;
@@ -55,6 +56,8 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
             case "debug" -> handleDebug(sender, args);
             case "install" -> handleInstall(sender);
             case "stats" -> handleStats(sender);
+            case "gui" -> handleGUI(sender);
+            case "notifications", "notif" -> handleNotifications(sender, args);
             case "cause" -> handleCause(sender, args);
             case "vote" -> handleVote(sender, args);
             case "diseases" -> handleDiseases(sender);
@@ -396,6 +399,7 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
             sender.sendMessage("");
             sender.sendMessage(ChatColor.WHITE + "Account tokens link this server to your F@H account");
             sender.sendMessage(ChatColor.WHITE + "Get your token from the F@H dashboard when logged in");
+            sender.sendMessage(ChatColor.WHITE + "Visit: " + ChatColor.AQUA + "https://app.foldingathome.org");
             sender.sendMessage("");
             sender.sendMessage(ChatColor.YELLOW + "⚠ Security Warning:");
             sender.sendMessage(ChatColor.GRAY + "• Anyone with this token can link machines to your account");
@@ -408,26 +412,53 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
                 sender.sendMessage(ChatColor.GREEN + "Token is currently configured");
                 sender.sendMessage(ChatColor.GRAY + "Machine name: " + 
                     plugin.getConfig().getString("folding-at-home.account.machine-name", "Minecraft-Server"));
+            } else {
+                sender.sendMessage("");
+                sender.sendMessage(ChatColor.RED + "No token configured yet");
+                sender.sendMessage(ChatColor.GRAY + "FAH will auto-start once you set a token");
             }
             return true;
         }
         
-        String accountToken = args[1];
-        String machineName = args.length > 2 ? args[2] : "Minecraft-Server";
+        String accountToken = args[1].trim();
+        String machineName = args.length > 2 ? String.join(" ", Arrays.copyOfRange(args, 2, args.length)) : "Minecraft-Server";
+        
+        // Basic validation
+        if (accountToken.length() < 10) {
+            sender.sendMessage(ChatColor.RED + "⚠ Token seems too short. Please verify you copied it correctly.");
+            sender.sendMessage(ChatColor.GRAY + "Account tokens are typically 32+ characters long");
+            return true;
+        }
         
         // Save token configuration
         plugin.getConfig().set("folding-at-home.account.account-token", accountToken);
         plugin.getConfig().set("folding-at-home.account.machine-name", machineName);
         plugin.saveConfig();
         
+        sender.sendMessage(ChatColor.GREEN + "✓ Account token configured!");
+        sender.sendMessage(ChatColor.GRAY + "Machine name: " + ChatColor.WHITE + machineName);
+        sender.sendMessage(ChatColor.YELLOW + "🔄 Applying configuration and restarting FAH client...");
+        
         // Trigger reconfiguration
         plugin.getFAHManager().reconfigureWithToken(accountToken, machineName);
         
-        sender.sendMessage(ChatColor.GREEN + "✓ Account token configured!");
-        sender.sendMessage(ChatColor.GRAY + "Machine name: " + ChatColor.WHITE + machineName);
-        sender.sendMessage(ChatColor.GRAY + "This server will appear in your F@H account");
+        // Schedule verification
+        Bukkit.getScheduler().runTaskLater(plugin, () -> {
+            plugin.getFAHManager().verifyTokenAppliedAsync(success -> {
+                if (success) {
+                    sender.sendMessage(ChatColor.GREEN + "✓ FAH client successfully linked to your account!");
+                    sender.sendMessage(ChatColor.GRAY + "Your server will now appear in your F@H dashboard");
+                    sender.sendMessage(ChatColor.GRAY + "Work will auto-resume after server restarts");
+                } else {
+                    sender.sendMessage(ChatColor.YELLOW + "⚠ Could not verify token application");
+                    sender.sendMessage(ChatColor.GRAY + "Check /fah status to see if FAH is running");
+                    sender.sendMessage(ChatColor.GRAY + "If issues persist, try: /fah start");
+                }
+            });
+        }, 100L);
+        
         sender.sendMessage("");
-        sender.sendMessage(ChatColor.YELLOW + "Remember to generate a new token in your account");
+        sender.sendMessage(ChatColor.YELLOW + "💡 Remember to generate a new token in your account");
         sender.sendMessage(ChatColor.GRAY + "This prevents others from using this token");
         
         return true;
@@ -821,14 +852,17 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/fah setup <user> <team> [passkey]" + ChatColor.GRAY + " - Traditional setup");
         sender.sendMessage(ChatColor.YELLOW + "/fah token <account-token>" + ChatColor.GRAY + " - Link with account token");
         sender.sendMessage(ChatColor.YELLOW + "/fah passkey <token>" + ChatColor.GRAY + " - Set passkey for bonus points");
+        sender.sendMessage(ChatColor.GRAY + "  ℹ FAH auto-starts and auto-resumes after server restarts");
         sender.sendMessage("");
         
         sender.sendMessage(ChatColor.AQUA + "Basic Commands:");
         sender.sendMessage(ChatColor.YELLOW + "/fah status" + ChatColor.GRAY + " - Check current status");
         sender.sendMessage(ChatColor.YELLOW + "/fah info" + ChatColor.GRAY + " - Detailed information");
         sender.sendMessage(ChatColor.YELLOW + "/fah stats" + ChatColor.GRAY + " - View contribution statistics");
+        sender.sendMessage(ChatColor.YELLOW + "/fah gui" + ChatColor.GRAY + " - Open interactive menu");
         sender.sendMessage(ChatColor.YELLOW + "/fah diseases" + ChatColor.GRAY + " - List research causes");
         sender.sendMessage(ChatColor.YELLOW + "/fah vote <disease>" + ChatColor.GRAY + " - Vote for research focus");
+        sender.sendMessage(ChatColor.YELLOW + "/fah notifications" + ChatColor.GRAY + " - Manage notification preferences");
         
         if (sender.hasPermission("fahdonor.account")) {
             sender.sendMessage("");
@@ -841,7 +875,7 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
         if (sender.hasPermission("fahdonor.admin")) {
             sender.sendMessage("");
             sender.sendMessage(ChatColor.AQUA + "Admin Commands:");
-            sender.sendMessage(ChatColor.YELLOW + "/fah start" + ChatColor.GRAY + " - Start FAH client");
+            sender.sendMessage(ChatColor.YELLOW + "/fah start" + ChatColor.GRAY + " - Manual start (auto-starts by default)");
             sender.sendMessage(ChatColor.YELLOW + "/fah stop" + ChatColor.GRAY + " - Stop FAH client");
             sender.sendMessage(ChatColor.YELLOW + "/fah install" + ChatColor.GRAY + " - Installation help");
             sender.sendMessage(ChatColor.YELLOW + "/fah pause" + ChatColor.GRAY + " - Pause folding");
@@ -860,13 +894,15 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
         sender.sendMessage("");
         sender.sendMessage(ChatColor.GRAY + "Get passkey: " + ChatColor.AQUA + "https://apps.foldingathome.org/getpasskey");
         sender.sendMessage(ChatColor.GRAY + "F@H Dashboard: " + ChatColor.AQUA + "https://app.foldingathome.org/");
+        sender.sendMessage(ChatColor.GRAY + "Get account token: " + ChatColor.AQUA + "https://app.foldingathome.org");
     }
     
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1) {
             List<String> commands = new ArrayList<>(Arrays.asList(
-                "setup", "token", "passkey", "status", "info", "start", "stop", "stats", "diseases", "vote", "showconfig", "verify"
+                "setup", "token", "passkey", "status", "info", "start", "stop", "stats", "gui", 
+                "notifications", "diseases", "vote", "showconfig", "verify"
             ));
             
             if (sender.hasPermission("fahdonor.account")) {
@@ -901,6 +937,16 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
                 }
                 causes.add("remove");
                 return causes;
+            }
+            if (args[0].equalsIgnoreCase("notifications") || args[0].equalsIgnoreCase("notif")) {
+                return Arrays.asList("bossbar", "actionbar", "title", "chat");
+            }
+        }
+        
+        if (args.length == 3) {
+            if ((args[0].equalsIgnoreCase("notifications") || args[0].equalsIgnoreCase("notif")) 
+                && !args[1].isEmpty()) {
+                return Arrays.asList("on", "off");
             }
         }
         
@@ -1223,6 +1269,103 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
         return changed;
     }
     
+    private boolean handleGUI(CommandSender sender) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(ChatColor.RED + "This command can only be used by players!");
+            return true;
+        }
+        
+        Player player = (Player) sender;
+        
+        if (!player.hasPermission("fahdonor.gui")) {
+            player.sendMessage(ChatColor.RED + "You don't have permission to open the GUI!");
+            return true;
+        }
+        
+        // Open statistics GUI
+        try {
+            com.thijs226.fahdonor.gui.StatisticsGUI gui = 
+                new com.thijs226.fahdonor.gui.StatisticsGUI(plugin, player);
+            gui.open();
+            player.sendMessage(ChatColor.GREEN + "Opening FAH statistics menu...");
+        } catch (Exception e) {
+            player.sendMessage(ChatColor.RED + "Error opening GUI: " + e.getMessage());
+            plugin.getLogger().log(Level.WARNING, "Error opening GUI for " + player.getName(), e);
+        }
+        
+        return true;
+    }
+    
+    private boolean handleNotifications(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player)) {
+            sender.sendMessage(ChatColor.RED + "This command can only be used by players!");
+            return true;
+        }
+        
+        Player player = (Player) sender;
+        
+        if (!player.hasPermission("fahdonor.notifications")) {
+            player.sendMessage(ChatColor.RED + "You don't have permission to manage notifications!");
+            return true;
+        }
+        
+        if (plugin.getNotificationManager() == null) {
+            player.sendMessage(ChatColor.RED + "Notification system not initialized!");
+            return true;
+        }
+        
+        var prefs = plugin.getNotificationManager().getPreferences(player);
+        
+        if (args.length < 2) {
+            // Show current preferences
+            player.sendMessage(ChatColor.GOLD + "=== Notification Preferences ===");
+            player.sendMessage(ChatColor.WHITE + "Boss Bars: " + (prefs.isBossBarEnabled() ? 
+                ChatColor.GREEN + "Enabled" : ChatColor.RED + "Disabled"));
+            player.sendMessage(ChatColor.WHITE + "Action Bars: " + (prefs.isActionBarEnabled() ? 
+                ChatColor.GREEN + "Enabled" : ChatColor.RED + "Disabled"));
+            player.sendMessage(ChatColor.WHITE + "Titles: " + (prefs.isTitleEnabled() ? 
+                ChatColor.GREEN + "Enabled" : ChatColor.RED + "Disabled"));
+            player.sendMessage(ChatColor.WHITE + "Chat Messages: " + (prefs.isChatEnabled() ? 
+                ChatColor.GREEN + "Enabled" : ChatColor.RED + "Disabled"));
+            player.sendMessage("");
+            player.sendMessage(ChatColor.YELLOW + "Usage: /fah notifications <type> <on|off>");
+            player.sendMessage(ChatColor.GRAY + "Types: bossbar, actionbar, title, chat");
+            return true;
+        }
+        
+        String type = args[1].toLowerCase();
+        boolean enable = args.length > 2 && args[2].equalsIgnoreCase("on");
+        
+        switch (type) {
+            case "bossbar", "boss" -> {
+                prefs.setBossBarEnabled(enable);
+                player.sendMessage(ChatColor.GREEN + "Boss bar notifications " + 
+                    (enable ? "enabled" : "disabled"));
+            }
+            case "actionbar", "action" -> {
+                prefs.setActionBarEnabled(enable);
+                player.sendMessage(ChatColor.GREEN + "Action bar notifications " + 
+                    (enable ? "enabled" : "disabled"));
+            }
+            case "title" -> {
+                prefs.setTitleEnabled(enable);
+                player.sendMessage(ChatColor.GREEN + "Title notifications " + 
+                    (enable ? "enabled" : "disabled"));
+            }
+            case "chat" -> {
+                prefs.setChatEnabled(enable);
+                player.sendMessage(ChatColor.GREEN + "Chat notifications " + 
+                    (enable ? "enabled" : "disabled"));
+            }
+            default -> {
+                player.sendMessage(ChatColor.RED + "Unknown notification type!");
+                player.sendMessage(ChatColor.GRAY + "Types: bossbar, actionbar, title, chat");
+            }
+        }
+        
+        return true;
+    }
+    
     private boolean handleStart(CommandSender sender) {
         if (!sender.hasPermission("fahdonor.admin")) {
             sender.sendMessage(ChatColor.RED + "You don't have permission to control FAH!");
@@ -1231,18 +1374,31 @@ public class FAHCommands implements CommandExecutor, TabCompleter {
         
         if (plugin.isRunning()) {
             sender.sendMessage(ChatColor.YELLOW + "FAH is already running!");
+            sender.sendMessage(ChatColor.GRAY + "Use /fah status to see current state");
             return true;
         }
         
-        sender.sendMessage(ChatColor.YELLOW + "Starting FAH client...");
+        sender.sendMessage(ChatColor.YELLOW + "🔄 Starting FAH client...");
         
-        // Start the FAH client
-        if (plugin.getFAHClient() != null) {
-            plugin.getFAHClient().resume();
+        // Start the FAH client through manager
+        if (plugin.getFAHManager() != null) {
+            plugin.getFAHManager().forceStart();
             plugin.setRunning(true);
-            sender.sendMessage(ChatColor.GREEN + "FAH client started successfully!");
+            
+            // Schedule status check
+            Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                if (plugin.getFAHManager().isFAHRunning()) {
+                    sender.sendMessage(ChatColor.GREEN + "✓ FAH client started successfully!");
+                    sender.sendMessage(ChatColor.GRAY + "Work will auto-resume after initialization");
+                    sender.sendMessage(ChatColor.GRAY + "Use /fah status to monitor progress");
+                } else {
+                    sender.sendMessage(ChatColor.RED + "⚠ FAH client failed to start");
+                    sender.sendMessage(ChatColor.GRAY + "Check console logs for errors");
+                    sender.sendMessage(ChatColor.GRAY + "Ensure account token is configured: /fah token");
+                }
+            }, 100L);
         } else {
-            sender.sendMessage(ChatColor.RED + "FAH client not initialized. Try reloading the plugin.");
+            sender.sendMessage(ChatColor.RED + "FAH manager not initialized. Try reloading the plugin.");
         }
         
         return true;

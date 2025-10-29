@@ -152,7 +152,9 @@ public class FAHClientManager {
 
         loadAccountConfiguration();
         loadCausePreference();
+        loadPersistedState();
         startFAHClient();
+        scheduleAutoRestart();
     }
 
     private void loadAccountConfiguration() {
@@ -210,17 +212,20 @@ public class FAHClientManager {
             // Update config with port settings
             int initialCores = requestedCoreOverride != null
                     ? requestedCoreOverride
-                    : calculateInitialCores(getOnlinePlayerCount());
+                    : (currentCores > 0 ? currentCores : calculateInitialCores(getOnlinePlayerCount()));
             if (initialCores == 1) {
                 initialCores = 0; // avoid running on a single core (pause instead)
             }
             updateConfigXml(currentAccount, currentCause, controlPort, webPort, initialCores);
 
-            // Build command line arguments
+            // Build command line arguments - ensure FAH auto-starts on boot
             List<String> command = new ArrayList<>();
             command.add(actualExecutable.getAbsolutePath());
             command.add("--config");
             command.add(new File(fahDirectory, "config.xml").getAbsolutePath());
+            // Add flag to ensure FAH client continues processing after restart
+            command.add("--chdir");
+            command.add(fahDirectory.getAbsolutePath());
 
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.directory(fahDirectory);
@@ -270,6 +275,18 @@ public class FAHClientManager {
             // Log additional details about the FAH client state
             if (isFAHRunning()) {
                 plugin.getLogger().info("FAH client is running.");
+                // Auto-unpause if we were running before
+                if (currentCores > 0) {
+                    plugin.getLogger().info(() -> "Auto-resuming FAH with " + currentCores + " cores");
+                    // Schedule unpause to happen after FAH is fully initialized
+                    executor.schedule(() -> {
+                        try {
+                            forceUnpause();
+                        } catch (Exception e) {
+                            plugin.getLogger().log(Level.WARNING, "Failed to auto-unpause FAH", e);
+                        }
+                    }, 10, TimeUnit.SECONDS);
+                }
             } else {
                 plugin.getLogger().warning("FAH client failed to start.");
             }
@@ -386,9 +403,15 @@ public class FAHClientManager {
                                     <account-token v='%s'/>
                                     <machine-name v='%s'/>
 
+                                    <!-- Power and Folding Control -->
+                                    <power v='full'/>
+                                    <on-idle v='false'/>
+                                    <idle-seconds v='0'/>
+
                                     <!-- Slot Configuration -->
                                     <slot id='0' type='CPU'>
                                         <cpus v='%d'/>
+                                        <paused v='false'/>
                                     </slot>
 
                                     <!-- Remote Control -->
@@ -417,9 +440,15 @@ public class FAHClientManager {
                                     <!-- Machine Name -->
                                     <machine-name v='%s'/>
 
+                                    <!-- Power and Folding Control -->
+                                    <power v='full'/>
+                                    <on-idle v='false'/>
+                                    <idle-seconds v='0'/>
+
                                     <!-- Slot Configuration -->
                                     <slot id='0' type='CPU'>
                                         <cpus v='%d'/>
+                                        <paused v='false'/>
                                     </slot>
 
                                     <!-- Remote Control -->
@@ -439,7 +468,7 @@ public class FAHClientManager {
                 // If initialCores==0, still write 2 into config to satisfy FAH minimum when it starts later
                 String finalized = (initialCores <= 0) ? configXml.replace("<cpus v='0'/>", "<cpus v='2'/>") : configXml;
                 Files.write(configFile.toPath(), finalized.getBytes());
-                plugin.getLogger().info("Wrote FAH config.xml");
+                plugin.getLogger().info("Wrote FAH config.xml with auto-resume enabled");
         }
 
     private void updateConfigXml(AccountInfo account, CausePreference cause) throws IOException {
@@ -547,7 +576,10 @@ public class FAHClientManager {
             if (controlPort == 0 && "file-based".equalsIgnoreCase(noPortMode)) {
                 // File-based control for hosts with no ports; run off the main thread
                 final int targetCores = clamped;
-                executor.execute(() -> setCoresFileMode(targetCores));
+                executor.execute(() -> {
+                    setCoresFileMode(targetCores);
+                    persistState();
+                });
                 return;
             }
 
@@ -570,12 +602,14 @@ public class FAHClientManager {
                                 setCoresFileMode(targetCores);
                             }
                             currentCores = targetCores;
+                            persistState();
                             return;
                         }
                     } else {
                         // No port configured - use file mode
                         setCoresFileMode(targetCores);
                         currentCores = targetCores;
+                        persistState();
                         return;
                     }
                 }
@@ -594,6 +628,7 @@ public class FAHClientManager {
                 }
 
                 currentCores = targetCores;
+                persistState();
 
             } catch (IOException e) {
                 plugin.getLogger().warning(() -> String.format("Error occurred: %s", e.getMessage()));
@@ -609,6 +644,7 @@ public class FAHClientManager {
     private synchronized void setCoresFileMode(int cores) {
         try {
             plugin.getLogger().info(() -> String.format("Applying file-based FAH core allocation: %d cores", cores));
+            plugin.getLogger().info("Using CLI commands to avoid restart when possible");
 
             CliCommandResult commandResult;
             if (cores == 0) {
@@ -629,23 +665,25 @@ public class FAHClientManager {
             }
 
             if (commandResult == CliCommandResult.RETRY_LATER) {
-                plugin.getLogger().info("Deferring core adjustment until CLI backoff expires to avoid interrupting FAH work unit.");
+                plugin.getLogger().info("Deferring core adjustment to preserve current work unit.");
                 return;
             }
 
             if (commandResult == CliCommandResult.APPLIED) {
                 syncConfigCpuSetting(cores);
                 currentCores = Math.max(cores, 0);
+                plugin.getLogger().info(() -> String.format("Successfully applied %d cores via CLI (no restart needed)", cores));
                 return;
             }
 
             // commandResult == FAILED
             if (cliFailureStreak.get() < 3) {
-                plugin.getLogger().warning("FAH CLI command failed; will retry later without restarting to preserve the current work unit.");
+                plugin.getLogger().warning("FAH CLI command failed; will retry later to preserve work unit.");
                 return;
             }
 
-            plugin.getLogger().warning("FAH CLI command repeatedly failed; falling back to process restart to enforce core change.");
+            plugin.getLogger().warning("FAH CLI repeatedly failed; restarting FAH process to enforce core change.");
+            plugin.getLogger().info("Note: On single-port servers, FAH restart is sometimes necessary for core changes");
             syncConfigCpuSetting(cores);
             if (cores <= 0) {
                 stopFahProcessForFileMode();
@@ -681,9 +719,15 @@ public class FAHClientManager {
                                     <account-token v='%s'/>
                                     <machine-name v='%s'/>
 
+                                    <!-- Power and Folding Control -->
+                                    <power v='full'/>
+                                    <on-idle v='false'/>
+                                    <idle-seconds v='0'/>
+
                                     <!-- Slot Configuration -->
                                     <slot id='0' type='CPU'>
                                         <cpus v='%d'/>
+                                        <paused v='false'/>
                                     </slot>
 
                                     <!-- Remote Control -->
@@ -980,5 +1024,68 @@ public class FAHClientManager {
             plugin.getLogger().warning(() -> "Failed to connect to FAH control interface: " + e.getMessage());
             throw e;
         }
+    }
+
+    /**
+     * Persists the current FAH state to allow auto-restart after server restart
+     */
+    private void persistState() {
+        try {
+            File stateFile = new File(plugin.getDataFolder(), "fah-state.properties");
+            Properties props = new Properties();
+            props.setProperty("cores", String.valueOf(currentCores));
+            props.setProperty("running", String.valueOf(isFAHRunning()));
+            props.setProperty("last-update", String.valueOf(System.currentTimeMillis()));
+            
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(stateFile)) {
+                props.store(fos, "FAH Client State - Auto-generated");
+            }
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to persist FAH state", e);
+        }
+    }
+
+    /**
+     * Loads persisted FAH state to enable auto-restart
+     */
+    private void loadPersistedState() {
+        try {
+            File stateFile = new File(plugin.getDataFolder(), "fah-state.properties");
+            if (!stateFile.exists()) {
+                return;
+            }
+            
+            Properties props = new Properties();
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(stateFile)) {
+                props.load(fis);
+            }
+            
+            int savedCores = Integer.parseInt(props.getProperty("cores", "0"));
+            boolean wasRunning = Boolean.parseBoolean(props.getProperty("running", "false"));
+            
+            if (wasRunning && savedCores > 0) {
+                plugin.getLogger().info(() -> String.format("Restoring FAH from previous session: %d cores", savedCores));
+                currentCores = savedCores;
+            }
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.WARNING, "Failed to load persisted FAH state", e);
+        }
+    }
+
+    /**
+     * Schedules periodic checks to ensure FAH stays running
+     */
+    private void scheduleAutoRestart() {
+        executor.scheduleAtFixedRate(() -> {
+            try {
+                if (!isFAHRunning()) {
+                    plugin.getLogger().warning("FAH client stopped unexpectedly. Auto-restarting...");
+                    startFAHClient();
+                }
+                persistState();
+            } catch (Exception e) {
+                plugin.getLogger().log(Level.WARNING, "Error in auto-restart check", e);
+            }
+        }, 60, 60, TimeUnit.SECONDS);
     }
 }

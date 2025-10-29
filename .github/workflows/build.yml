@@ -1,0 +1,68 @@
+name: Build Plugin
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: gradle
+        
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+      
+    - name: Validate Gradle wrapper
+      run: ./gradlew --version
+      
+    - name: Build with Gradle
+      run: ./gradlew clean shadowJar --no-daemon --stacktrace --info
+      
+    - name: List build outputs
+      if: always()
+      run: |
+        echo "📂 Build directory contents:"
+        ls -laR build/ || echo "No build directory found"
+        
+    - name: Upload artifact
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: FAHResourceDonor-Plugin
+        path: build/libs/*.jar
+        retention-days: 30
+        
+    - name: Display build info
+      if: success()
+      run: |
+        echo "✅ Build completed successfully!"
+        echo "📦 JAR file created:"
+        ls -lh build/libs/*.jar
+        
+    - name: Upload build logs on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs
+        path: |
+          build/reports/
+          ~/.gradle/
+        retention-days: 7
